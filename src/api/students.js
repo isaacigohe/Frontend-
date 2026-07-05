@@ -1,56 +1,88 @@
 // =============================================================================
-// src/api/students.js
+// src/api/students.js  (REWRITTEN to delegate to client.js)
 // -----------------------------------------------------------------------------
-// Thin, named-function wrappers around the shared Axios instance from Phase 1
-// (src/api/client.js). Each function here corresponds to exactly one Django
-// REST endpoint. Keeping these in one file means StudentDashboard.jsx never
-// imports Axios directly or repeats a URL string — if a route path changes,
-// it changes in exactly one place.
+// This file no longer talks to Axios directly. Every call below wraps an
+// already-verified function exported from client.js — that's the single
+// source of truth for endpoint paths, HTTP methods, and payload shapes
+// (e.g. the upload field is `file_attachment` via PATCH, not `file` via
+// POST — that mismatch in the previous version of this file would have
+// silently broken every document upload).
 //
-// Adjust the URL strings below to match your actual Django urls.py routes;
-// the paths here follow the REST convention implied by the assignment brief.
+// StudentDashboard.jsx does NOT need to change — every exported function
+// name and return shape below is unchanged from before.
 // =============================================================================
 
-import apiClient from './client';
+import {
+  getMyProfile,
+  updateMyProfile,
+  getUniversities as getUniversitiesRaw,
+  getApplications,
+  createApplication,
+  submitApplication,
+  getDocumentChecklist as getDocumentChecklistRaw,
+  uploadDocument as uploadDocumentRaw,
+} from './client';
+import { normalizeList } from './utils';
 
-// GET the logged-in student's own profile record.
+// Private helper: fetch the logged-in student's own application record.
+// Assumes GET /applications/ is scoped server-side to return only the
+// requesting student's own application(s), and that a student has at most
+// one active application (confirmed with you — one at a time).
+async function getMyApplication() {
+  const response = await getApplications();
+  const list = Array.isArray(response.data) ? response.data : response.data.results ?? [];
+  return list[0] ?? null;
+}
+
 export function getStudentProfile() {
-  return apiClient.get('/students/me/');
+  return getMyProfile();
 }
 
-// GET the logged-in student's current application pipeline status.
-// Expected response shape: { status: 'DRAFT' | 'SUBMITTED' | 'UNDER_REVIEW'
-//                                    | 'COMPLIANCE_PHASE' | 'APPROVED' }
-export function getApplicationProgress() {
-  return apiClient.get('/students/me/progress/');
+export async function getApplicationProgress() {
+  const application = await getMyApplication();
+  return {
+    data: {
+      status: application ? application.status : 'DRAFT',
+      applicationId: application?.id ?? null,
+      universityName: application?.university_name ?? application?.university?.name ?? null,
+    },
+  };
 }
 
-// GET a paginated slice of the university catalog.
-// `params` may include: { page, country, language }
-// The backend is expected to use DRF's PageNumberPagination (page_size=10)
-// and return { count, next, previous, results }.
-export function getUniversities(params) {
-  return apiClient.get('/universities/', { params });
+// GET a paginated slice of the university catalog, normalized to always
+// return { results, count } regardless of whether the backend paginates.
+export async function getUniversities(params) {
+  const response = await getUniversitiesRaw(params);
+  const { results, count } = normalizeList(response.data);
+  return { data: { results, count } };
 }
 
-// GET the logged-in student's compliance document checklist.
-// Expected response shape: an array of
-//   { id, document_name, status, admin_comment, updated_at }
-export function getDocumentChecklist() {
-  return apiClient.get('/students/me/checklist/');
+export async function getDocumentChecklist() {
+  const application = await getMyApplication();
+  if (!application) return { data: [] };
+  return getDocumentChecklistRaw(application.id);
 }
 
-// POST a replacement/initial file for a single checklist item.
-// Uses multipart/form-data since we're sending a binary File object.
+// Delegates straight to client.js's uploadDocument — which correctly PATCHes
+// with a `file_attachment` field, matching your real DocumentUploadView.
 export function uploadDocument(documentId, file) {
-  const formData = new FormData();
-  formData.append('file', file);
-  return apiClient.post(`/students/me/checklist/${documentId}/upload/`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+  return uploadDocumentRaw(documentId, file);
 }
 
-// PATCH the student's High School tracking flag.
 export function updateHighSchoolTracking(isEnabled) {
-  return apiClient.patch('/students/me/', { is_high_school_track: isEnabled });
+  return updateMyProfile({ is_high_school_track: isEnabled });
+}
+
+// Implements the approved "Select University -> Create Application" flow:
+// create a DRAFT application, then immediately submit it.
+//
+// CONFIRMED against applications/models.py: the foreign key field on
+// Application is `destination_university`, not `university`. This was
+// wrong in the previous version of this file and would have 400'd on
+// every single application attempt — thanks for pasting the model.
+export async function applyToUniversity(universityId) {
+  const createResponse = await createApplication({ destination_university: universityId });
+  const applicationId = createResponse.data.id;
+  const submitResponse = await submitApplication(applicationId);
+  return submitResponse.data ?? createResponse.data;
 }

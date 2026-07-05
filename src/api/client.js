@@ -24,9 +24,6 @@ const apiClient = axios.create({
 });
 
 // ── REQUEST INTERCEPTOR ────────────────────────────────────────────────────
-// Runs before every request leaves the browser.
-// Reads the JWT access token from localStorage and injects it into the
-// Authorization header automatically — no component ever does this manually.
 apiClient.interceptors.request.use(
   (config) => {
     const accessToken = localStorage.getItem(TOKEN_KEYS.ACCESS);
@@ -49,6 +46,23 @@ apiClient.interceptors.response.use(
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
+
+      // FIX: was this request even carrying a session in the first place?
+      // Check BEFORE deciding this 401 means "your session expired." An
+      // anonymous visitor on the public Explore page (no access token ever
+      // set) hitting an endpoint that turns out to require auth would
+      // previously get force-redirected to /login via a hard page reload —
+      // that's the "clicking a university sometimes blanks the page" bug.
+      // There was no session for that visitor, so there's nothing to
+      // "expire." We let the error propagate normally instead, so the
+      // calling component's own error state handles it in-place (e.g. the
+      // programs drawer shows "Could not load programs") rather than the
+      // whole app yanking a logged-out visitor off the page they're on.
+      const hadAccessToken = Boolean(localStorage.getItem(TOKEN_KEYS.ACCESS));
+      if (!hadAccessToken) {
+        return Promise.reject(error);
+      }
+
       const refreshToken = localStorage.getItem(TOKEN_KEYS.REFRESH);
 
       if (refreshToken) {
@@ -64,7 +78,8 @@ apiClient.interceptors.response.use(
         }
       }
 
-      // Refresh failed or no refresh token — session is truly expired
+      // Refresh failed or no refresh token — AND we know there WAS a real
+      // access token on this request — so this is a genuine expired session.
       localStorage.removeItem(TOKEN_KEYS.ACCESS);
       localStorage.removeItem(TOKEN_KEYS.REFRESH);
       localStorage.removeItem(TOKEN_KEYS.USER);

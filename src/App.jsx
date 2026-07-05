@@ -3,6 +3,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import DashboardLayout from './components/layout/DashboardLayout';
 
 // Standard relative layouts
 import StudentDashboard from './components/dashboard/StudentDashboard';
@@ -19,7 +20,7 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
-          {/* Public Landing Page is now mounted safely at the root route */}
+          {/* Public Landing Page — no Header/Footer shell, it has its own hero nav */}
           <Route path="/" element={<ExploreCatalog />} />
 
           {/* Public Auth Routes */}
@@ -27,24 +28,30 @@ export default function App() {
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
-          {/* Student Dashboard Integrated from Phase 3 */}
+          {/* Student Dashboard — wrapped in the shared Header/Footer shell */}
           <Route path="/student" element={
             <ProtectedRoute allowedRoles={['STUDENT']}>
-              <StudentDashboard />
+              <DashboardLayout>
+                <StudentDashboard />
+              </DashboardLayout>
             </ProtectedRoute>
           } />
 
-          {/* Admin Review Split-Panel Desk Integrated from Phase 4 */}
+          {/* Admin Review Split-Panel Desk — same shared shell */}
           <Route path="/admin" element={
             <ProtectedRoute allowedRoles={['HOME_ADMIN']}>
-              <AdminReviewDesk />
+              <DashboardLayout>
+                <AdminReviewDesk />
+              </DashboardLayout>
             </ProtectedRoute>
           } />
 
-          {/* Host Coordinator Workspace Integrated from Phase 4 */}
+          {/* Host Coordinator Workspace — same shared shell */}
           <Route path="/coordinator" element={
             <ProtectedRoute allowedRoles={['HOST_COORD']}>
-              <HostCoordinatorDashboard />
+              <DashboardLayout>
+                <HostCoordinatorDashboard />
+              </DashboardLayout>
             </ProtectedRoute>
           } />
 

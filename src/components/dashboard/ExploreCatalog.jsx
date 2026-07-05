@@ -1,5 +1,5 @@
 // =============================================================================
-// src/components/dashboard/ExploreCatalog.jsx
+// ExploreCatalog.jsx
 // -----------------------------------------------------------------------------
 // PUBLIC landing / explore page, mounted at the root route "/". No auth
 // required — this is the first thing a prospective student sees, before
@@ -14,11 +14,12 @@
 //      dividers, no cards). Clicking a row lazily fetches that university's
 //      programs and slides open a detail drawer beneath it.
 //
-// STATE MODEL:
+// STATE MODEL (see the written explanation at the bottom of the setup
+// guide in chat for the full walkthrough):
 //   - `expandedId`     — which single university's drawer is open (or null)
 //   - `programsCache`  — { [universityId]: { status, programs, error } },
-//                        so re-opening a row you already expanded once
-//                        does not re-fetch over the network.
+//                         so re-opening a row you already expanded once
+//                         does not re-fetch over the network.
 // =============================================================================
 
 import { useState, useEffect, useCallback } from 'react';
@@ -28,7 +29,6 @@ import {
   Globe,
   Languages,
   ChevronDown,
-  ExternalLink,
   GraduationCap,
   CalendarClock,
   ArrowRight,
@@ -37,15 +37,20 @@ import {
   LogIn,
   UserPlus,
 } from 'lucide-react';
-
-// Using clean, absolute path aliases to guarantee imports never fail
-// Change your imports at the top to look exactly like this:
-//  Correct relative path
-import { CustomDropdown, PaginationFooter, LoadingRow, EmptyState } from "../shared/DashboardUI";
+import { CustomDropdown, Badge, PaginationFooter, LoadingRow, EmptyState, advisoryBadgeMeta, LANGUAGE_CHOICES, degreeLevelLabel } from './shared/DashboardUI';
 import { getPublicUniversities, getUniversityPrograms } from '../../api/public';
+
 const PAGE_SIZE = 10;
 const COUNTRY_OPTIONS = ['All Countries', 'United States', 'United Kingdom', 'Germany', 'Japan', 'South Korea', 'Australia', 'France', 'Spain'];
-const LANGUAGE_OPTIONS = ['All Languages', 'English', 'German', 'Japanese', 'Korean', 'French', 'Spanish'];
+// CONFIRMED against University.Language — replaces a guessed list that
+// included "Japanese"/"Korean", neither of which is a real backend choice.
+const LANGUAGE_OPTIONS = ['All Languages', ...LANGUAGE_CHOICES];
+
+// NOTE: the old numeric ADVISORY_TONE/KNOWN_ADVISORY_LEVELS constants have
+// been removed. CONFIRMED against universities/models.py:
+// travel_advisory_level is a string-code TextChoices (UNKNOWN, NORMAL,
+// LEVEL_1..LEVEL_4), not a number — advisoryBadgeMeta() from
+// shared/DashboardUI.jsx is now the single source of truth for this.
 
 // -----------------------------------------------------------------------------
 // HeroSection — the high-impact top-of-page block. The image wrapper is a
@@ -109,6 +114,13 @@ function HeroSection({ backgroundImageUrl }) {
 // -----------------------------------------------------------------------------
 // ProgramDrawer — the slide-down "master-detail" panel for one university.
 // -----------------------------------------------------------------------------
+// ANIMATION NOTE: this uses the CSS grid-template-rows trick instead of a
+// JS-measured max-height. The wrapping <div> animates its `grid-template-
+// rows` between `0fr` (collapsed) and `1fr` (expanded); the actual content
+// sits in a `overflow-hidden` child. Because `fr` units respect the
+// content's natural height, this animates smoothly to exactly the right
+// height with no `getBoundingClientRect` measuring and no layout jump —
+// notably smoother than a fixed max-height guess.
 function ProgramDrawer({ isOpen, cacheEntry, universityName }) {
   return (
     <div
@@ -126,29 +138,35 @@ function ProgramDrawer({ isOpen, cacheEntry, universityName }) {
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {cacheEntry.programs.map((program) => (
-                <div key={program.id} className="border border-slate-200 bg-white p-4 shadow-sm">
+                <div key={program.id} className="border border-slate-200 bg-white p-4">
                   <div className="flex items-start gap-2">
                     <GraduationCap className="mt-0.5 h-4 w-4 shrink-0 text-navy-700" />
                     <div>
                       <h4 className="text-sm font-semibold text-navy-900">{program.name}</h4>
-                      <p className="text-xs uppercase tracking-wide text-slate-500">{program.degree_level || 'Undergraduate Track'}</p>
+                      {/* CONFIRMED: Program.DegreeLevel choices mapped via
+                          degreeLevelLabel() — was raw-printing the code
+                          (e.g. "BACHELOR") before. */}
+                      <p className="text-xs uppercase tracking-wide text-slate-500">{degreeLevelLabel(program.degree_level)}</p>
                     </div>
                   </div>
                   <div className="my-3 h-px bg-slate-200" />
-                  <div className="flex items-center gap-1.5 text-xs text-slate-600">
-                    <CalendarClock className="h-3.5 w-3.5 text-slate-400" />
-                    Deadline: <span className="font-medium text-slate-800">{program.application_deadline || 'October 15, 2026'}</span>
+                  <div className="space-y-1 text-xs text-slate-600">
+                    <div className="flex items-center gap-1.5">
+                      <CalendarClock className="h-3.5 w-3.5 text-slate-400" />
+                      Deadline: <span className="font-medium text-slate-800">{program.application_deadline || 'Not yet published'}</span>
+                    </div>
+                    {/* CONFIRMED real Program fields — replaces a portal_url
+                        link that doesn't exist on this model. */}
+                    <div className="flex items-center gap-1.5">
+                      <GraduationCap className="h-3.5 w-3.5 text-slate-400" />
+                      {program.duration_semesters} semester{program.duration_semesters === 1 ? '' : 's'}
+                      {program.tuition_per_semester_usd ? ` · $${Number(program.tuition_per_semester_usd).toLocaleString()}/semester` : ''}
+                    </div>
                   </div>
-                  {program.portal_url && (
-                    <a
-                      href={program.portal_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-3 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-navy-700 hover:text-gold-600"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                      Institutional Portal
-                    </a>
+                  {program.credits_transferable && (
+                    <span className="mt-2 inline-block border border-emerald-500 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+                      Credits Transferable
+                    </span>
                   )}
                 </div>
               ))}
@@ -161,7 +179,9 @@ function ProgramDrawer({ isOpen, cacheEntry, universityName }) {
 }
 
 // -----------------------------------------------------------------------------
-// UniversityRow — one editorial-style list row (not a card)
+// UniversityRow — one editorial-style list row (not a card): a horizontal
+// rule above and below, a small square image-placeholder block on the left,
+// and a subtle skew-on-hover cue that this row is interactive.
 // -----------------------------------------------------------------------------
 function UniversityRow({ university, isExpanded, onToggle, cacheEntry }) {
   return (
@@ -171,7 +191,9 @@ function UniversityRow({ university, isExpanded, onToggle, cacheEntry }) {
         onClick={() => onToggle(university.id)}
         className="group flex w-full items-center gap-5 px-6 py-5 text-left transition-colors hover:bg-slate-50"
       >
-        {/* Image placeholder wrapper */}
+        {/* Image placeholder wrapper — same swap-in contract as the hero:
+            drop a real thumbnail URL onto a background-image style here
+            once photography exists per-university. */}
         <div className="flex h-16 w-16 shrink-0 items-center justify-center bg-navy-900 transition-transform duration-200 ease-out group-hover:-skew-x-3">
           <ImageIcon className="h-6 w-6 text-white/40" strokeWidth={1.5} />
         </div>
@@ -179,16 +201,25 @@ function UniversityRow({ university, isExpanded, onToggle, cacheEntry }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-3">
             <h3 className="text-base font-bold uppercase tracking-wide text-navy-900">{university.name}</h3>
-            
-            {/* Dynamic Class-based Badge matching index.css parameters */}
-            <span className={`badge badge-advisory-${university.travel_advisory_level || 'unknown'}`}>
-              <MapPin className="mr-0.5 inline h-3 w-3" />
-              Advisory L{university.travel_advisory_level || 'Unknown'}
-            </span>
+            {/* CONFIRMED against universities/models.py: travel_advisory_level
+                is a string code (UNKNOWN/NORMAL/LEVEL_1..LEVEL_4), not a
+                number — advisoryBadgeMeta() is the shared, single source of
+                truth for mapping that code to a tone + label. */}
+            {(() => {
+              const { tone, label } = advisoryBadgeMeta(university.travel_advisory_level);
+              return (
+                <span className="inline-flex items-center gap-1">
+                  <Badge tone={tone}>
+                    <MapPin className="mr-0.5 inline h-3 w-3" />
+                    {label}
+                  </Badge>
+                </span>
+              );
+            })()}
           </div>
           <p className="mt-1 text-xs uppercase tracking-wide text-slate-500">
             {university.city ? `${university.city}, ` : ''}
-            {university.country} · {university.languages_offered || 'English'}
+            {university.country} · {university.primary_language}
           </p>
         </div>
 
@@ -201,7 +232,7 @@ function UniversityRow({ university, isExpanded, onToggle, cacheEntry }) {
 }
 
 // -----------------------------------------------------------------------------
-// TOP-LEVEL: ExploreCatalog Component Workspace
+// TOP-LEVEL: ExploreCatalog
 // -----------------------------------------------------------------------------
 export default function ExploreCatalog() {
   const [universities, setUniversities] = useState([]);
@@ -214,11 +245,19 @@ export default function ExploreCatalog() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Layout control states
+  // Which single row is expanded. Master-detail is intentionally
+  // single-open: opening a new row auto-closes the previous one, so the
+  // page never grows into an unbounded, scroll-heavy wall of open drawers.
   const [expandedId, setExpandedId] = useState(null);
+
+  // Cache of already-fetched program lists, keyed by university id. This is
+  // what makes re-clicking a previously-opened row instant (collapse/open
+  // again with no loading flash) instead of re-hitting the network every
+  // single time.
   const [programsCache, setProgramsCache] = useState({});
 
-  // Debounce configuration
+  // Debounce the search box exactly like the Admin queue in Phase 4 — wait
+  // for the visitor to stop typing before firing a network request.
   useEffect(() => {
     const timeoutId = setTimeout(() => setSearchQuery(searchInput), 400);
     return () => clearTimeout(timeoutId);
@@ -232,10 +271,9 @@ export default function ExploreCatalog() {
       if (country !== 'All Countries') params.country = country;
       if (language !== 'All Languages') params.language = language;
       if (searchQuery) params.search = searchQuery;
-      
       const response = await getPublicUniversities(params);
-      setUniversities(response.data.results || response.data);
-      setTotalCount(response.data.count || (response.data.results?.length || 0));
+      setUniversities(response.data.results);
+      setTotalCount(response.data.count);
     } catch (err) {
       setError('Could not load the university catalog right now. Please refresh.');
     } finally {
@@ -256,15 +294,17 @@ export default function ExploreCatalog() {
     setPage(1);
   }
 
+  // Handles a row click: collapses if it's already open, otherwise expands
+  // it AND lazily kicks off the programs fetch — but only if this
+  // university's programs are not already sitting in the cache.
   async function handleToggleRow(universityId) {
     if (expandedId === universityId) {
-      setExpandedId(null);
+      setExpandedId(null); // clicking the already-open row just closes it
       return;
     }
-    setExpandedId(universityId);
+    setExpandedId(universityId); // single-open master-detail: this replaces whatever was open before
 
-    // Dynamic session execution cache bypass
-    if (programsCache[universityId]) return;
+    if (programsCache[universityId]) return; // already fetched once this session — no need to re-fetch
 
     setProgramsCache((prev) => ({ ...prev, [universityId]: { status: 'loading' } }));
     try {
@@ -278,11 +318,11 @@ export default function ExploreCatalog() {
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   return (
-    <div className="min-h-screen bg-canvas animate-fade-in transition-all duration-300 ease-out">
+    <div className="min-h-screen bg-canvas">
       <HeroSection />
 
       {/* ---------------------------------------------------------------
-          FILTER SECTION PANEL
+          FILTER BAR
       --------------------------------------------------------------- */}
       <section className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl flex-wrap items-end justify-between gap-4 px-6 py-6">
@@ -301,7 +341,7 @@ export default function ExploreCatalog() {
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
                 placeholder="University name…"
-                className="w-52 border border-slate-300 bg-white px-3 py-2 text-sm text-navy-900 focus:border-gold-500 focus:outline-none focus:ring-1 focus:ring-gold-500"
+                className="w-52 border border-slate-300 bg-white px-3 py-2 text-sm text-navy-900 focus:border-gold-500 focus:outline-none"
               />
             </div>
             <CustomDropdown label="Country" icon={Globe} value={country} options={COUNTRY_OPTIONS} onChange={handleCountryChange} />
@@ -311,52 +351,47 @@ export default function ExploreCatalog() {
       </section>
 
       {/* ---------------------------------------------------------------
-          MASTER CORE LIST GRID
+          MASTER LIST
       --------------------------------------------------------------- */}
-      <section className="mx-auto max-w-6xl px-6 py-8">
-        <div className="border border-slate-200 bg-white shadow-sm rounded-sm">
+      <section className="mx-auto max-w-6xl px-6 py-2">
+        <div className="border border-slate-200 bg-white">
           {isLoading ? (
-            <LoadingRow label="Loading network catalog…" />
+            <LoadingRow label="Loading catalog…" />
           ) : error ? (
-            <p className="p-6 text-sm text-crimson-600 font-semibold">{error}</p>
+            <p className="p-6 text-sm text-crimson-600">{error}</p>
           ) : universities.length === 0 ? (
-            <EmptyState label="No partner universities match the current criteria." />
+            <EmptyState label="No universities match the current filters." />
           ) : (
-            <div className="divide-y divide-slate-200">
-              {universities.map((university) => (
-                <UniversityRow
-                  key={university.id}
-                  university={university}
-                  isExpanded={expandedId === university.id}
-                  cacheEntry={programsCache[university.id]}
-                  onToggle={handleToggleRow}
-                />
-              ))}
-            </div>
+            universities.map((university) => (
+              <UniversityRow
+                key={university.id}
+                university={university}
+                isExpanded={expandedId === university.id}
+                cacheEntry={programsCache[university.id]}
+                onToggle={handleToggleRow}
+              />
+            ))
           )}
         </div>
         {!isLoading && !error && universities.length > 0 && (
-          <div className="border border-t-0 border-slate-200 bg-white shadow-sm">
+          <div className="border border-t-0 border-slate-200 bg-white">
             <PaginationFooter page={page} totalPages={totalPages} onPageChange={setPage} />
           </div>
         )}
       </section>
 
       {/* ---------------------------------------------------------------
-          CLOSING CALL TO ACTION
+          CLOSING CTA BANNER
       --------------------------------------------------------------- */}
-      <section className="mt-16 bg-navy-900 px-6 py-20 border-t border-slate-800">
+      <section className="mt-12 bg-navy-900 px-6 py-16">
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-6 text-center">
-          <h2 className="max-w-xl text-2xl font-bold uppercase tracking-wide text-white sm:text-3xl">
-            Ready to Begin Your Exchange Journey?
+          <h2 className="max-w-xl text-2xl font-bold uppercase tracking-wide text-white">
+            Ready to Begin Your Exchange Application?
           </h2>
           <div className="h-px w-16 bg-gold-500" />
-          <p className="max-w-md text-sm text-slate-400">
-            Establish your profile dashboard, store your compliance documents, and launch your application tracks.
-          </p>
           <Link
             to="/register"
-            className="mt-2 flex items-center gap-2 bg-gold-500 px-8 py-3.5 text-xs font-bold uppercase tracking-wider text-navy-900 transition-all hover:bg-gold-600 active:scale-[0.99]"
+            className="flex items-center gap-2 bg-gold-500 px-8 py-3 text-xs font-bold uppercase tracking-wide text-navy-900 transition-colors hover:bg-gold-600"
           >
             Create an Account
             <ArrowRight className="h-4 w-4" />

@@ -1,60 +1,85 @@
 // =============================================================================
-// src/api/admin.js
+// src/api/admin.js  (CORRECTED against your real models.py / serializers.py)
 // -----------------------------------------------------------------------------
-// Named Axios wrappers consumed by AdminReviewDesk.jsx. Same pattern as
-// Phase 3's src/api/students.js: one function per endpoint, no URL strings
-// or Axios calls ever appear inside the component file itself.
+// Three confirmed field-name/value bugs fixed here:
+//   1. GET /applications/<id>/ already nests the full checklist as
+//      `document_checklist` (see ApplicationSerializer) — no second network
+//      call needed. The old version fired a redundant GET /documents/ call.
+//   2. DocumentChecklist has NO `status` field. The real field is
+//      `verification_status`, and there is no `VERIFIED` value in its
+//      choices — the "document approved" value is `APPROVED`.
+//   3. Application-level rejection uses `rejection_reason` (confirmed on
+//      the Application model and enforced by ApplicationSerializer's
+//      `_validate_status_transition`). `admin_comment` only exists on
+//      DocumentChecklist, for flagging an individual document — these are
+//      two different fields on two different models, not interchangeable.
+//
+// AdminReviewDesk.jsx's DocumentInspector needed matching updates for the
+// nested student_detail/university_detail fields and doc.verification_status
+// — see that file's own comments.
 // =============================================================================
 
-import apiClient from './client';
+import { getApplications, getApplication, reviewDocument, advanceApplication, createUniversity } from './client';
+import { normalizeList } from './utils';
 
-// GET a paginated, filterable queue of applications awaiting admin review.
-// `params` may include: { page, status, search }
-// Expected response: DRF pagination shape { count, next, previous, results }
-// where each result is a summary row:
-//   { id, student_name, university_name, status, submitted_at }
-export function getApplicationQueue(params) {
-  return apiClient.get('/admin/applications/', { params });
+// CONFIRMED against ApplicationSerializer._validate_status_transition — this
+// is the exact linear pipeline your backend enforces. Mirroring it here lets
+// the frontend always send a status transition your backend will actually
+// accept, instead of guessing/hardcoding one fixed target (which is exactly
+// what broke "Approve" on a SUBMITTED application: the old code always sent
+// COMPLIANCE_PHASE, which is only valid from UNDER_REVIEW).
+export const FORWARD_TRANSITIONS = {
+  SUBMITTED: 'UNDER_REVIEW',
+  UNDER_REVIEW: 'COMPLIANCE_PHASE',
+  COMPLIANCE_PHASE: 'APPROVED',
+};
+
+export async function getApplicationQueue(params) {
+  const response = await getApplications(params);
+  const { results, count } = normalizeList(response.data);
+  return { data: { results, count } };
 }
 
-// GET full detail for a single application, including its nested document
-// list, for the right-hand inspection panel.
-// Expected response:
-//   { id, student_name, university_name, status,
-//     documents: [{ id, document_name, file_url, status, admin_comment }] }
-export function getApplicationDetail(applicationId) {
-  return apiClient.get(`/admin/applications/${applicationId}/`);
+// The detail/retrieve serializer (ApplicationSerializer) already embeds the
+// full document_checklist array — we just relabel it to `documents` so
+// DocumentInspector's existing `detail.documents.map(...)` keeps working
+// without needing to touch that component's JSX.
+export async function getApplicationDetail(applicationId) {
+  const response = await getApplication(applicationId);
+  return { data: { ...response.data, documents: response.data.document_checklist ?? [] } };
 }
 
-// PATCH a single document's status to VERIFIED (no comment required —
-// verification is a simple confirmation, not a rejection).
+// verification_status: 'APPROVED' is the real "this document is good" value
+// on DocumentChecklist — there is no 'VERIFIED' in its choices.
 export function verifyDocument(documentId) {
-  return apiClient.patch(`/admin/documents/${documentId}/`, { status: 'VERIFIED' });
+  return reviewDocument(documentId, { verification_status: 'APPROVED' });
 }
 
-// PATCH a single document's status to ACTION_REQUIRED, attaching the
-// mandatory admin_comment explaining what the student needs to fix.
-// The frontend guardrail (ReasonGate component) guarantees `comment` is
-// always a non-empty, trimmed string by the time this is called — but we
-// still never trust the client alone; the backend serializer should also
-// reject a blank admin_comment on this transition.
 export function flagDocument(documentId, comment) {
-  return apiClient.patch(`/admin/documents/${documentId}/`, {
-    status: 'ACTION_REQUIRED',
-    admin_comment: comment,
-  });
+  return reviewDocument(documentId, { verification_status: 'ACTION_REQUIRED', admin_comment: comment });
 }
 
-// PATCH the whole application forward to the next pipeline stage.
-export function approveApplication(applicationId, nextStatus) {
-  return apiClient.patch(`/admin/applications/${applicationId}/`, { status: nextStatus });
+// FIXED: takes the application's CURRENT status and looks up the one valid
+// forward transition, rather than accepting/assuming a target status from
+// the caller. This is what makes Approve work correctly regardless of which
+// stage the application is currently sitting in.
+export function approveApplication(applicationId, currentStatus) {
+  const nextStatus = FORWARD_TRANSITIONS[currentStatus];
+  return advanceApplication(applicationId, nextStatus ? { status: nextStatus } : {});
 }
 
-// PATCH the whole application to REJECTED, attaching the mandatory
-// rejection reason (again guarded client-side by ReasonGate).
+// rejection_reason (NOT admin_comment) is the field ApplicationSerializer's
+// _validate_status_transition actually requires when status -> REJECTED.
 export function rejectApplication(applicationId, comment) {
-  return apiClient.patch(`/admin/applications/${applicationId}/`, {
-    status: 'REJECTED',
-    admin_comment: comment,
-  });
+  return advanceApplication(applicationId, { status: 'REJECTED', rejection_reason: comment });
+}
+
+// NEW: registers a University entity. ASSUMPTION FLAGGED — I have not seen
+// universities/models.py or its serializer, so these field names are a
+// best-effort guess based on what the Application model's clean() method
+// references (university.minimum_gpa) and what the public catalog displays
+// (name, country, languages_offered). If POST /universities/ 400s, paste me
+// the error body and I'll correct the field names in one place.
+export function registerUniversity(payload) {
+  return createUniversity(payload);
 }

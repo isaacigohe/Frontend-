@@ -1,6 +1,5 @@
 // src/context/AuthContext.jsx
-// Global authentication state — wraps the whole app so any component
-// can read the logged-in user and their role via useAuth().
+// Global authentication state.
 
 import { createContext, useContext, useState, useEffect } from 'react';
 import { loginUser, logoutUser, registerUser, TOKEN_KEYS } from '../api/client';
@@ -23,37 +22,32 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
-  // ── DECODE JWT TOKEN ──────────────────────────────────────────────────
-  const decodeToken = (accessToken) => {
-    try {
-      const payload = JSON.parse(atob(accessToken.split('.')[1]));
-      return {
-        id: payload.user_id || payload.sub,
-        email: payload.email,
-        role: payload.role,
-        full_name: payload.full_name || payload.name || 'User',
-      };
-    } catch (e) {
-      console.error('Failed to decode token:', e);
-      return null;
-    }
-  };
-
   // ── LOGIN ──────────────────────────────────────────────────────────────
   const login = async (email, password) => {
     const response = await loginUser(email, password);
     const { access, refresh } = response.data;
-    const userData = decodeToken(access);
     
-    if (!userData) {
-      throw new Error('Invalid token received');
-    }
+    // CRITICAL FIX: Get user data from the response body, NOT from the token!
+    // The token doesn't contain email/role, but the response does.
+    const userData = response.data.user || response.data;
+
+    // Build user info from the response data
+    const userInfo = {
+      id: userData.id || userData.user_id,
+      email: userData.email,
+      role: userData.role,
+      full_name: userData.full_name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim(),
+      first_name: userData.first_name || '',
+      last_name: userData.last_name || '',
+    };
+
+    console.log('🔍 User data from login response:', userInfo);
 
     localStorage.setItem(TOKEN_KEYS.ACCESS, access);
     localStorage.setItem(TOKEN_KEYS.REFRESH, refresh);
-    localStorage.setItem(TOKEN_KEYS.USER, JSON.stringify(userData));
-    setUser(userData);
-    return userData;
+    localStorage.setItem(TOKEN_KEYS.USER, JSON.stringify(userInfo));
+    setUser(userInfo);
+    return userInfo;
   };
 
   // ── REGISTER ────────────────────────────────────────────────────────────

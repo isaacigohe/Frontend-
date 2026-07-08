@@ -1,6 +1,5 @@
 // src/pages/auth/LoginPage.jsx
-// Two-column institutional login screen — brand panel on the left,
-// form on the right. Redirects to the correct workspace by role on success.
+// Two-column institutional login screen.
 
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
@@ -22,7 +21,6 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
 
-    // Basic client-side validation before hitting the API
     if (!form.email || !form.password) {
       setError('Email and password are required.');
       return;
@@ -31,9 +29,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const user = await login(form.email, form.password);
-
+      
       // ── ROUTE BY ROLE ──────────────────────────────────────────────────
-      // CONFIRMED: Backend roles are: STUDENT, HOME_ADMIN, HOST_COORD
       if (user.role === 'STUDENT') {
         navigate('/student');
       } else if (user.role === 'HOME_ADMIN') {
@@ -41,11 +38,9 @@ export default function LoginPage() {
       } else if (user.role === 'HOST_COORD') {
         navigate('/coordinator');
       } else {
-        // Fallback for unknown roles
         navigate('/');
       }
     } catch (err) {
-      // Try to extract a meaningful error message from the backend
       const responseData = err?.response?.data;
       let errorMessage = 'Invalid email or password.';
       if (typeof responseData === 'string') {
@@ -54,10 +49,6 @@ export default function LoginPage() {
         errorMessage = responseData.detail;
       } else if (responseData?.non_field_errors) {
         errorMessage = responseData.non_field_errors[0];
-      } else if (responseData?.email) {
-        errorMessage = responseData.email[0];
-      } else if (responseData?.password) {
-        errorMessage = responseData.password[0];
       }
       setError(errorMessage);
       setLoading(false);
@@ -67,7 +58,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-surface-50 flex">
 
-      {/* Left brand panel — hidden on small screens */}
+      {/* Left brand panel */}
       <div className="hidden lg:flex flex-col justify-between w-2/5 bg-navy-800 p-12">
         <div className="flex items-center gap-3">
           <GraduationCap className="text-navy-300" size={28} />
@@ -78,7 +69,7 @@ export default function LoginPage() {
 
         <div>
           <h1 className="text-3xl font-bold text-white leading-snug mb-4">
-            International Academic <br />Exchange Portal
+            International Academic Exchange Portal
           </h1>
           <p className="text-navy-300 text-sm leading-relaxed">
             Apply, track compliance, and manage credit transfers across

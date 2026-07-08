@@ -1,59 +1,62 @@
 // src/api/client.js
 // Centralized network engine for GlobalScholar.
-// Every API call in the app goes through this one file.
-// If the backend URL ever changes, we update it here only.
 
 import axios from 'axios';
 
-// Base URL — points to our live Django backend on Render.
-// Falls back to localhost if VITE_API_URL is not set in .env
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api/v1';
 
-// localStorage key names — centralized so we never typo a key string
 export const TOKEN_KEYS = {
   ACCESS:  'gs_access_token',
   REFRESH: 'gs_refresh_token',
   USER:    'gs_user',
 };
 
-// Custom Axios instance — pre-configured with base URL and headers
 const apiClient = axios.create({
   baseURL: BASE_URL,
   headers: { 'Content-Type': 'application/json' },
-  timeout: 20000, // 20s — Render free tier can be slow waking from sleep
+  timeout: 20000,
 });
 
 // ── REQUEST INTERCEPTOR ────────────────────────────────────────────────────
+// Only add Authorization header if we have a token AND the request is NOT
+// to a public endpoint.
 apiClient.interceptors.request.use(
   (config) => {
-    const accessToken = localStorage.getItem(TOKEN_KEYS.ACCESS);
-    if (accessToken) {
-      config.headers['Authorization'] = `Bearer ${accessToken}`;
+    // List of public endpoints that don't need authentication
+    const publicEndpoints = [
+      '/universities/',
+      '/universities',
+      '/auth/login/',
+      '/auth/register/',
+      '/auth/token/refresh/',
+    ];
+    
+    // Check if this request is to a public endpoint
+    const isPublic = publicEndpoints.some((endpoint) => config.url?.startsWith(endpoint));
+    
+    if (!isPublic) {
+      const accessToken = localStorage.getItem(TOKEN_KEYS.ACCESS);
+      if (accessToken) {
+        config.headers['Authorization'] = `Bearer ${accessToken}`;
+      }
     }
+    
     return config;
   },
   (error) => Promise.reject(error)
 );
 
 // ── RESPONSE INTERCEPTOR ───────────────────────────────────────────────────
-// Runs after every response returns from Django.
-// If a request fails with 401 (expired token), we silently use the refresh
-// token to get a new access token and retry the original request once.
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
 
+    // Only attempt refresh on 401 if this wasn't already a retry
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
-      const hadAccessToken = Boolean(localStorage.getItem(TOKEN_KEYS.ACCESS));
-      if (!hadAccessToken) {
-        return Promise.reject(error);
-      }
-
       const refreshToken = localStorage.getItem(TOKEN_KEYS.REFRESH);
-
       if (refreshToken) {
         try {
           const refreshResponse = await axios.post(`${BASE_URL}/auth/token/refresh/`, { refresh: refreshToken });
@@ -64,14 +67,19 @@ apiClient.interceptors.response.use(
             return apiClient(originalRequest);
           }
         } catch (refreshError) {
-          // Refresh failed
+          // Refresh failed, clear session
+          localStorage.removeItem(TOKEN_KEYS.ACCESS);
+          localStorage.removeItem(TOKEN_KEYS.REFRESH);
+          localStorage.removeItem(TOKEN_KEYS.USER);
+          window.location.href = '/login';
         }
+      } else {
+        // No refresh token, redirect to login
+        localStorage.removeItem(TOKEN_KEYS.ACCESS);
+        localStorage.removeItem(TOKEN_KEYS.REFRESH);
+        localStorage.removeItem(TOKEN_KEYS.USER);
+        window.location.href = '/login';
       }
-
-      localStorage.removeItem(TOKEN_KEYS.ACCESS);
-      localStorage.removeItem(TOKEN_KEYS.REFRESH);
-      localStorage.removeItem(TOKEN_KEYS.USER);
-      window.location.href = '/login';
     }
 
     return Promise.reject(error);
@@ -79,7 +87,7 @@ apiClient.interceptors.response.use(
 );
 
 // ══════════════════════════════════════════════════════════════════════════
-// ENDPOINT FUNCTIONS — one per Django view, named after the action
+// ENDPOINT FUNCTIONS
 // ══════════════════════════════════════════════════════════════════════════
 
 // ── Auth ─────────────────────────────────────────────────────────────────
@@ -92,7 +100,7 @@ export const refreshAccessToken = (refreshToken) => apiClient.post('/auth/token/
 export const getMyProfile    = () => apiClient.get('/users/me/');
 export const updateMyProfile = (data) => apiClient.patch('/users/me/', data);
 
-// ── Universities (public — no token needed for GET) ────────────────────────
+// ── Universities (PUBLIC - no token needed) ─────────────────────────────
 export const getUniversities = (params = {}) => apiClient.get('/universities/', { params });
 export const getUniversity   = (id) => apiClient.get(`/universities/${id}/`);
 export const createUniversity = (data) => apiClient.post('/universities/', data);
@@ -117,12 +125,11 @@ export const rejectApplication = (id, data) => apiClient.post(`/applications/${i
 // ── Documents ────────────────────────────────────────────────────────────
 export const getDocumentChecklist = (applicationId) => apiClient.get(`/applications/${applicationId}/documents/`);
 
-// Uploads use FormData since we're sending a real file, not JSON
 export const uploadDocument = (documentId, file) => {
   const formData = new FormData();
   formData.append('file_attachment', file);
   return apiClient.patch(`/documents/${documentId}/upload/`, formData, {
-    headers: { 'Content-Type': undefined }, // let browser set multipart boundary
+    headers: { 'Content-Type': undefined },
   });
 };
 
@@ -131,7 +138,6 @@ export const reviewDocument = (documentId, data) => apiClient.patch(`/documents/
 // ── Bulk Document Upload ─────────────────────────────────────────────────
 export const bulkUploadDocuments = (applicationId, files) => {
   const formData = new FormData();
-  // files is an object with keys: passport, transcript, language_test, etc.
   Object.keys(files).forEach((key) => {
     if (files[key]) {
       formData.append(key, files[key]);

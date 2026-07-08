@@ -8,13 +8,10 @@ import { loginUser, logoutUser, registerUser, TOKEN_KEYS } from '../api/client';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  // user holds the decoded token payload: { id, email, role, full_name }
   const [user, setUser] = useState(null);
-  // loading prevents flashing the login page while we check localStorage
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // On first load, restore the session from localStorage if it exists
     const storedUser = localStorage.getItem(TOKEN_KEYS.USER);
     if (storedUser) {
       try {
@@ -27,8 +24,6 @@ export function AuthProvider({ children }) {
   }, []);
 
   // ── DECODE JWT TOKEN ──────────────────────────────────────────────────
-  // Decodes the JWT payload and extracts user info.
-  // CONFIRMED: Your backend JWT includes: user_id, email, role, full_name
   const decodeToken = (accessToken) => {
     try {
       const payload = JSON.parse(atob(accessToken.split('.')[1]));
@@ -64,7 +59,6 @@ export function AuthProvider({ children }) {
   // ── REGISTER ────────────────────────────────────────────────────────────
   const register = async (formData) => {
     await registerUser(formData);
-    // Auto-login after registration
     return await login(formData.email, formData.password);
   };
 
@@ -91,5 +85,4 @@ export function AuthProvider({ children }) {
   );
 }
 
-// Custom hook so components write useAuth() instead of useContext(AuthContext)
 export const useAuth = () => useContext(AuthContext);

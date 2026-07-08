@@ -29,17 +29,39 @@ export default function LoginPage() {
     }
 
     setLoading(true);
-    const user = await login(form.email, form.password).catch((err) => {
-      setError(err.response?.data?.detail || 'Invalid email or password.');
+    try {
+      const user = await login(form.email, form.password);
+
+      // ── ROUTE BY ROLE ──────────────────────────────────────────────────
+      // CONFIRMED: Backend roles are: STUDENT, HOME_ADMIN, HOST_COORD
+      if (user.role === 'STUDENT') {
+        navigate('/student');
+      } else if (user.role === 'HOME_ADMIN') {
+        navigate('/admin');
+      } else if (user.role === 'HOST_COORD') {
+        navigate('/coordinator');
+      } else {
+        // Fallback for unknown roles
+        navigate('/');
+      }
+    } catch (err) {
+      // Try to extract a meaningful error message from the backend
+      const responseData = err?.response?.data;
+      let errorMessage = 'Invalid email or password.';
+      if (typeof responseData === 'string') {
+        errorMessage = responseData;
+      } else if (responseData?.detail) {
+        errorMessage = responseData.detail;
+      } else if (responseData?.non_field_errors) {
+        errorMessage = responseData.non_field_errors[0];
+      } else if (responseData?.email) {
+        errorMessage = responseData.email[0];
+      } else if (responseData?.password) {
+        errorMessage = responseData.password[0];
+      }
+      setError(errorMessage);
       setLoading(false);
-    });
-
-    if (!user) return;
-
-    // Route to the correct workspace based on the role in the JWT
-    if (user.role === 'STUDENT') navigate('/student');
-    else if (user.role === 'HOME_ADMIN') navigate('/admin');
-    else if (user.role === 'HOST_COORD') navigate('/coordinator');
+    }
   };
 
   return (
@@ -98,7 +120,7 @@ export default function LoginPage() {
           </p>
 
           {error && (
-            <div className="alert-error mb-5">
+            <div className="flex items-start gap-3 p-3.5 bg-crimson-50 border border-crimson-100 rounded text-sm text-crimson-700 mb-5">
               <AlertCircle size={15} className="shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
@@ -106,7 +128,7 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="input-label">Email address</label>
+              <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">Email address</label>
               <div className="relative">
                 <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
                 <input
@@ -115,14 +137,14 @@ export default function LoginPage() {
                   value={form.email}
                   onChange={handleChange}
                   placeholder="you@institution.edu"
-                  className="input-field pl-9"
+                  className="w-full px-3 py-2 pl-9 bg-white border border-surface-300 rounded text-sm text-ink-900 placeholder:text-ink-400 focus:border-gold-500 focus:outline-none"
                   autoComplete="email"
                 />
               </div>
             </div>
 
             <div>
-              <label className="input-label">Password</label>
+              <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">Password</label>
               <div className="relative">
                 <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
                 <input
@@ -131,13 +153,17 @@ export default function LoginPage() {
                   value={form.password}
                   onChange={handleChange}
                   placeholder="••••••••"
-                  className="input-field pl-9"
+                  className="w-full px-3 py-2 pl-9 bg-white border border-surface-300 rounded text-sm text-ink-900 placeholder:text-ink-400 focus:border-gold-500 focus:outline-none"
                   autoComplete="current-password"
                 />
               </div>
             </div>
 
-            <button type="submit" disabled={loading} className="btn-primary w-full justify-center mt-2">
+            <button 
+              type="submit" 
+              disabled={loading} 
+              className="inline-flex items-center justify-center gap-2 w-full px-4 py-2 bg-navy-800 hover:bg-navy-900 text-white text-sm font-medium rounded border border-transparent transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed mt-2"
+            >
               {loading ? (
                 <>
                   <Loader2 size={14} className="animate-spin" /> Signing in...

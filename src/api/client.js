@@ -47,17 +47,6 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
-      // FIX: was this request even carrying a session in the first place?
-      // Check BEFORE deciding this 401 means "your session expired." An
-      // anonymous visitor on the public Explore page (no access token ever
-      // set) hitting an endpoint that turns out to require auth would
-      // previously get force-redirected to /login via a hard page reload —
-      // that's the "clicking a university sometimes blanks the page" bug.
-      // There was no session for that visitor, so there's nothing to
-      // "expire." We let the error propagate normally instead, so the
-      // calling component's own error state handles it in-place (e.g. the
-      // programs drawer shows "Could not load programs") rather than the
-      // whole app yanking a logged-out visitor off the page they're on.
       const hadAccessToken = Boolean(localStorage.getItem(TOKEN_KEYS.ACCESS));
       if (!hadAccessToken) {
         return Promise.reject(error);
@@ -66,20 +55,19 @@ apiClient.interceptors.response.use(
       const refreshToken = localStorage.getItem(TOKEN_KEYS.REFRESH);
 
       if (refreshToken) {
-        const refreshResponse = await axios
-          .post(`${BASE_URL}/auth/token/refresh/`, { refresh: refreshToken })
-          .catch(() => null);
-
-        if (refreshResponse?.status === 200) {
-          const newAccessToken = refreshResponse.data.access;
-          localStorage.setItem(TOKEN_KEYS.ACCESS, newAccessToken);
-          originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
-          return apiClient(originalRequest);
+        try {
+          const refreshResponse = await axios.post(`${BASE_URL}/auth/token/refresh/`, { refresh: refreshToken });
+          if (refreshResponse?.status === 200) {
+            const newAccessToken = refreshResponse.data.access;
+            localStorage.setItem(TOKEN_KEYS.ACCESS, newAccessToken);
+            originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
+            return apiClient(originalRequest);
+          }
+        } catch (refreshError) {
+          // Refresh failed
         }
       }
 
-      // Refresh failed or no refresh token — AND we know there WAS a real
-      // access token on this request — so this is a genuine expired session.
       localStorage.removeItem(TOKEN_KEYS.ACCESS);
       localStorage.removeItem(TOKEN_KEYS.REFRESH);
       localStorage.removeItem(TOKEN_KEYS.USER);
@@ -122,6 +110,10 @@ export const createApplication = (data) => apiClient.post('/applications/', data
 export const submitApplication = (id) => apiClient.post(`/applications/${id}/submit/`);
 export const advanceApplication = (id, data) => apiClient.post(`/applications/${id}/advance/`, data);
 
+// ── Approve/Reject ───────────────────────────────────────────────────────
+export const approveApplication = (id) => apiClient.post(`/applications/${id}/approve/`);
+export const rejectApplication = (id, data) => apiClient.post(`/applications/${id}/reject/`, data);
+
 // ── Documents ────────────────────────────────────────────────────────────
 export const getDocumentChecklist = (applicationId) => apiClient.get(`/applications/${applicationId}/documents/`);
 
@@ -136,10 +128,30 @@ export const uploadDocument = (documentId, file) => {
 
 export const reviewDocument = (documentId, data) => apiClient.patch(`/documents/${documentId}/review/`, data);
 
+// ── Bulk Document Upload ─────────────────────────────────────────────────
+export const bulkUploadDocuments = (applicationId, files) => {
+  const formData = new FormData();
+  // files is an object with keys: passport, transcript, language_test, etc.
+  Object.keys(files).forEach((key) => {
+    if (files[key]) {
+      formData.append(key, files[key]);
+    }
+  });
+  return apiClient.post(`/applications/${applicationId}/upload-documents/`, formData, {
+    headers: { 'Content-Type': undefined },
+  });
+};
+
 // ── Credit Transfers ─────────────────────────────────────────────────────
 export const getCreditTransfers  = (applicationId) => apiClient.get(`/applications/${applicationId}/credits/`);
 export const getCreditTransfer   = (id) => apiClient.get(`/credits/${id}/`);
 export const createCreditTransfer = (applicationId, data) => apiClient.post(`/applications/${applicationId}/credits/`, data);
 export const updateCreditTransfer = (id, data) => apiClient.patch(`/credits/${id}/`, data);
+
+// ── Notifications ────────────────────────────────────────────────────────
+export const getNotifications = () => apiClient.get('/notifications/');
+export const getUnreadCount = () => apiClient.get('/notifications/unread-count/');
+export const markNotificationRead = (id) => apiClient.post(`/notifications/${id}/read/`);
+export const markAllNotificationsRead = () => apiClient.post('/notifications/mark-all-read/');
 
 export default apiClient;

@@ -1,25 +1,11 @@
 // =============================================================================
-// HostCoordinatorDashboard.jsx  (MOCK-DATA VERSION)
+// HostCoordinatorDashboard.jsx
 // -----------------------------------------------------------------------------
 // PHASE 4b — GlobalScholar Host Coordinator (HOST_COORD) Dashboard
-//
-// STATUS: intentionally NOT wired to the backend. There are no placement,
-// arrival-state, or logistics-checklist models/endpoints yet — that's a
-// deliberate, agreed decision (see chat history), not an oversight. Every
-// data point on this screen comes from the MOCK_PLACEMENTS array below,
-// so the full four-role product story (Student -> Admin -> Host Coordinator)
-// is visually complete for review even though this one role's backend is
-// still being built.
-//
-// SWAPPING IN REAL DATA LATER: once placement endpoints exist, the only
-// change needed is replacing the `useState(MOCK_PLACEMENTS)` initializer
-// with a useEffect + API call (identical pattern to every other dashboard
-// in this app) — every component below (ArrivalStepper, LogisticsChecklist,
-// the stat cards) already reads from plain state and doesn't care whether
-// that state came from a mock array or a real fetch.
+// CONNECTED TO REAL BACKEND!
 // =============================================================================
 
-import { useState, Fragment } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import {
   Users,
   Plane,
@@ -32,312 +18,477 @@ import {
   CalendarClock,
   ClipboardList,
   UserCheck,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Loader2,
+  FileText,
+  ExternalLink,
+  ShieldCheck,
 } from 'lucide-react';
-import { CustomDropdown, Badge, EmptyState } from './shared/DashboardUI';
+import { CustomDropdown, Badge, EmptyState, LoadingRow, documentTypeLabel } from './shared/DashboardUI';
+import {
+  getHostApplications,
+  getHostApplicationDetail,
+  approveHostApplication,
+  rejectHostApplication,
+  getHostDocumentChecklist,
+  reviewHostDocument,
+  getHostNotifications,
+  getHostUnreadCount,
+  getHostUniversity,
+} from '../../api/hostcoord';
 
-// The arrival pipeline is its own small state machine, separate from the
-// six-stage application pipeline — a placement only starts existing once an
-// application has already been APPROVED, so it tracks physical logistics,
-// not paperwork review.
-const ARRIVAL_STAGES = [
-  { key: 'AWAITING_ARRIVAL', label: 'Awaiting Arrival', icon: CalendarClock },
-  { key: 'ARRIVED', label: 'Arrived', icon: Plane },
-  { key: 'HOUSING_CONFIRMED', label: 'Housing Confirmed', icon: Home },
-  { key: 'ORIENTATION_COMPLETE', label: 'Orientation Complete', icon: ClipboardCheck },
-];
+const STATUS_FILTER_OPTIONS = ['All Statuses', 'SUBMITTED', 'UNDER_REVIEW', 'COMPLIANCE_PHASE', 'APPROVED', 'REJECTED'];
 
-const ARRIVAL_FILTER_OPTIONS = ['All Placements', ...ARRIVAL_STAGES.map((s) => s.key)];
-
-function toneForArrivalState(state) {
-  if (state === 'ORIENTATION_COMPLETE') return 'emerald';
-  if (state === 'HOUSING_CONFIRMED') return 'navy';
-  if (state === 'ARRIVED') return 'amber';
-  return 'slate';
+function toneForStatus(status) {
+  switch (status) {
+    case 'APPROVED':
+      return 'emerald';
+    case 'REJECTED':
+      return 'red';
+    case 'UNDER_REVIEW':
+      return 'amber';
+    case 'COMPLIANCE_PHASE':
+      return 'orange';
+    default:
+      return 'slate';
+  }
 }
 
-// -----------------------------------------------------------------------------
-// MOCK DATA — realistic enough to demo the whole flow, clearly labeled as
-// mock in the code so nobody mistakes it for a real fetch later.
-// -----------------------------------------------------------------------------
-const MOCK_PLACEMENTS = [
-  {
-    id: 'mock-1',
-    student_name: 'Amara Chen',
-    home_university: 'University of Toronto',
-    program_term: 'Fall 2026',
-    arrival_state: 'AWAITING_ARRIVAL',
-    expected_arrival_date: '2026-08-14',
-    logistics_checklist: [
-      { id: 'l1', task_name: 'Housing Assigned', is_complete: true },
-      { id: 'l2', task_name: 'Airport Pickup Scheduled', is_complete: false },
-      { id: 'l3', task_name: 'Orientation Booked', is_complete: false },
-      { id: 'l4', task_name: 'Insurance Verified', is_complete: true },
-    ],
-  },
-  {
-    id: 'mock-2',
-    student_name: 'Diego Ferreira',
-    home_university: 'Universidade de São Paulo',
-    program_term: 'Fall 2026',
-    arrival_state: 'ARRIVED',
-    expected_arrival_date: '2026-08-02',
-    logistics_checklist: [
-      { id: 'l5', task_name: 'Housing Assigned', is_complete: true },
-      { id: 'l6', task_name: 'Airport Pickup Scheduled', is_complete: true },
-      { id: 'l7', task_name: 'Orientation Booked', is_complete: true },
-      { id: 'l8', task_name: 'Insurance Verified', is_complete: false },
-    ],
-  },
-  {
-    id: 'mock-3',
-    student_name: 'Priya Nair',
-    home_university: 'University of Mumbai',
-    program_term: 'Fall 2026',
-    arrival_state: 'HOUSING_CONFIRMED',
-    expected_arrival_date: '2026-07-28',
-    logistics_checklist: [
-      { id: 'l9', task_name: 'Housing Assigned', is_complete: true },
-      { id: 'l10', task_name: 'Airport Pickup Scheduled', is_complete: true },
-      { id: 'l11', task_name: 'Orientation Booked', is_complete: true },
-      { id: 'l12', task_name: 'Insurance Verified', is_complete: true },
-    ],
-  },
-  {
-    id: 'mock-4',
-    student_name: 'Lukas Weber',
-    home_university: 'Ludwig Maximilian University',
-    program_term: 'Fall 2026',
-    arrival_state: 'ORIENTATION_COMPLETE',
-    expected_arrival_date: '2026-07-15',
-    logistics_checklist: [
-      { id: 'l13', task_name: 'Housing Assigned', is_complete: true },
-      { id: 'l14', task_name: 'Airport Pickup Scheduled', is_complete: true },
-      { id: 'l15', task_name: 'Orientation Booked', is_complete: true },
-      { id: 'l16', task_name: 'Insurance Verified', is_complete: true },
-    ],
-  },
-  {
-    id: 'mock-5',
-    student_name: 'Fatima Al-Sayed',
-    home_university: 'American University of Beirut',
-    program_term: 'Fall 2026',
-    arrival_state: 'AWAITING_ARRIVAL',
-    expected_arrival_date: '2026-08-20',
-    logistics_checklist: [
-      { id: 'l17', task_name: 'Housing Assigned', is_complete: false },
-      { id: 'l18', task_name: 'Airport Pickup Scheduled', is_complete: false },
-      { id: 'l19', task_name: 'Orientation Booked', is_complete: false },
-      { id: 'l20', task_name: 'Insurance Verified', is_complete: false },
-    ],
-  },
-];
+// ── ReasonGate ───────────────────────────────────────────────────────────
+function ReasonGate({ label, confirmLabel, tone, onConfirm, onCancel, isSubmitting }) {
+  const [comment, setComment] = useState('');
+  const isValid = comment.trim().length > 0;
 
-// -----------------------------------------------------------------------------
-// StatCard — compact summary metric card for the top strip.
-// -----------------------------------------------------------------------------
-function StatCard({ icon: Icon, label, value, tone = 'slate' }) {
-  const toneText = { slate: 'text-slate-800', amber: 'text-amber-700', navy: 'text-navy-800', emerald: 'text-emerald-700' }[tone];
   return (
-    <div className="flex items-center gap-4 border border-slate-200 bg-white p-5 shadow-sm rounded-none">
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center border border-slate-200 bg-slate-50">
-        <Icon className={`h-5 w-5 ${toneText}`} />
-      </div>
-      <div>
-        <p className={`text-2xl font-bold ${toneText}`}>{value}</p>
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+    <div className={`border ${tone === 'red' ? 'border-red-300 bg-red-50' : 'border-amber-300 bg-amber-50'} p-3 rounded-none`}>
+      <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">{label}</label>
+      <textarea
+        value={comment}
+        onChange={(event) => setComment(event.target.value)}
+        rows={3}
+        placeholder="Describe exactly why this application is being rejected…"
+        className="w-full resize-none border border-slate-300 bg-white p-2 text-sm text-slate-800 rounded-none focus:outline-none focus:ring-1 focus:ring-slate-400"
+      />
+      <div className="mt-2 flex items-center justify-between">
+        {!isValid && <span className="text-[11px] font-medium text-slate-500">A reason is required to reject.</span>}
+        <div className="ml-auto flex gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-600 rounded-none hover:border-slate-400"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={!isValid || isSubmitting}
+            onClick={() => onConfirm(comment.trim())}
+            className={`flex items-center gap-1.5 border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide rounded-none disabled:cursor-not-allowed disabled:opacity-40 ${
+              tone === 'red'
+                ? 'border-red-600 bg-red-600 text-white hover:bg-red-700'
+                : 'border-amber-600 bg-amber-600 text-white hover:bg-amber-700'
+            }`}
+          >
+            {isSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            {confirmLabel}
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-// -----------------------------------------------------------------------------
-// ArrivalStepper — compact horizontal stage tracker.
-// -----------------------------------------------------------------------------
-function ArrivalStepper({ currentStateKey, placementId, onAdvance }) {
-  const currentIndex = ARRIVAL_STAGES.findIndex((s) => s.key === currentStateKey);
-  const isFinalStage = currentIndex === ARRIVAL_STAGES.length - 1;
-  const nextStage = ARRIVAL_STAGES[currentIndex + 1];
+// ── Document Inspector ──────────────────────────────────────────────────
+function DocumentInspector({ applicationId, onActionComplete }) {
+  const [documents, setDocuments] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [actionError, setActionError] = useState(null);
+  const [activeGate, setActiveGate] = useState(null);
+  const [isSubmittingAction, setIsSubmittingAction] = useState(false);
 
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <div className="flex flex-1 items-center">
-        {ARRIVAL_STAGES.map((stage, index) => {
-          const StageIcon = stage.icon;
-          const isComplete = index < currentIndex;
-          const isActive = index === currentIndex;
-          const isLast = index === ARRIVAL_STAGES.length - 1;
-          return (
-            <div key={stage.key} className={`flex items-center ${isLast ? '' : 'flex-1'}`}>
-              <div className="flex flex-col items-center gap-1">
-                <div
-                  className={`flex h-8 w-8 items-center justify-center border-2 rounded-none ${
-                    isComplete || isActive ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-300 bg-white text-slate-300'
-                  }`}
-                >
-                  <StageIcon className="h-4 w-4" />
-                </div>
-                <span className={`text-center text-[10px] font-semibold uppercase tracking-wide ${isActive ? 'text-slate-900' : 'text-slate-400'}`}>
-                  {stage.label}
-                </span>
-              </div>
-              {!isLast && <div className={`mx-1.5 h-0.5 flex-1 ${isComplete ? 'bg-slate-800' : 'bg-slate-300'}`} />}
-            </div>
-          );
-        })}
-      </div>
+  const fetchDocuments = useCallback(async () => {
+    if (!applicationId) return;
+    setIsLoading(true);
+    try {
+      const response = await getHostDocumentChecklist(applicationId);
+      setDocuments(response.data.results || response.data || []);
+    } catch (err) {
+      setDocuments([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [applicationId]);
 
-      {!isFinalStage && (
-        <button
-          type="button"
-          onClick={() => onAdvance(placementId, nextStage.key)}
-          className="flex shrink-0 items-center gap-1.5 border border-slate-800 bg-slate-800 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white rounded-none hover:bg-slate-900"
-        >
-          <ArrowRight className="h-3.5 w-3.5" />
-          Mark {nextStage.label}
-        </button>
-      )}
-    </div>
-  );
-}
+  useEffect(() => {
+    fetchDocuments();
+  }, [fetchDocuments]);
 
-// -----------------------------------------------------------------------------
-// LogisticsChecklist
-// -----------------------------------------------------------------------------
-function LogisticsChecklist({ placementId, tasks, onToggle }) {
-  return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-      {tasks.map((task) => (
-        <button
-          key={task.id}
-          type="button"
-          onClick={() => onToggle(placementId, task.id, !task.is_complete)}
-          className="flex items-center gap-2 border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-700 rounded-none hover:border-slate-400"
-        >
-          {task.is_complete ? (
-            <CheckSquare className="h-4 w-4 shrink-0 text-slate-800" />
-          ) : (
-            <Square className="h-4 w-4 shrink-0 text-slate-400" />
-          )}
-          <span className={task.is_complete ? 'text-slate-400 line-through' : ''}>{task.task_name}</span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// -----------------------------------------------------------------------------
-// TOP-LEVEL: HostCoordinatorDashboard
-// -----------------------------------------------------------------------------
-export default function HostCoordinatorDashboard() {
-  const [placements, setPlacements] = useState(MOCK_PLACEMENTS);
-  const [arrivalFilter, setArrivalFilter] = useState('All Placements');
-  const [expandedId, setExpandedId] = useState(null);
-
-  function toggleRow(placementId) {
-    setExpandedId((prev) => (prev === placementId ? null : placementId));
+  async function handleVerifyDocument(documentId) {
+    setActionError(null);
+    try {
+      await reviewHostDocument(documentId, { verification_status: 'APPROVED' });
+      await fetchDocuments();
+      if (onActionComplete) onActionComplete();
+    } catch (err) {
+      setActionError('Could not verify the document. Please retry.');
+    }
   }
 
-  // Mock mutation: updates local state directly since there's no backend
-  // yet. The shape of this function is intentionally identical to what a
-  // real `await updateArrivalState(...); await refetch();` version would
-  // look like, so swapping in the real API later is a small, mechanical
-  // change rather than a rewrite.
-  function handleAdvanceArrival(placementId, nextState) {
-    setPlacements((prev) => prev.map((p) => (p.id === placementId ? { ...p, arrival_state: nextState } : p)));
+  async function handleFlagDocument(documentId, comment) {
+    setIsSubmittingAction(true);
+    setActionError(null);
+    try {
+      await reviewHostDocument(documentId, { verification_status: 'ACTION_REQUIRED', admin_comment: comment });
+      setActiveGate(null);
+      await fetchDocuments();
+      if (onActionComplete) onActionComplete();
+    } catch (err) {
+      setActionError('Could not flag the document. Please retry.');
+    } finally {
+      setIsSubmittingAction(false);
+    }
   }
 
-  function handleToggleTask(placementId, taskId, nextValue) {
-    setPlacements((prev) =>
-      prev.map((p) =>
-        p.id === placementId
-          ? { ...p, logistics_checklist: p.logistics_checklist.map((t) => (t.id === taskId ? { ...t, is_complete: nextValue } : t)) }
-          : p
-      )
+  if (!applicationId) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 border border-slate-200 bg-white p-10 text-center rounded-none">
+        <FileText className="h-6 w-6 text-slate-300" />
+        <p className="text-sm text-slate-400">Select an application to inspect documents.</p>
+      </div>
     );
   }
 
-  const visiblePlacements =
-    arrivalFilter === 'All Placements' ? placements : placements.filter((p) => p.arrival_state === arrivalFilter);
+  return (
+    <div className="border border-slate-200 bg-white p-4 rounded-none">
+      <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Submitted Documents</h3>
+      {isLoading ? (
+        <LoadingRow label="Loading documents…" />
+      ) : actionError && (
+        <div className="mb-3 flex items-center gap-2 border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 rounded-none">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          {actionError}
+        </div>
+      )}
+      <div className="space-y-2">
+        {documents.length === 0 ? (
+          <p className="text-sm text-slate-400">No documents submitted yet.</p>
+        ) : (
+          documents.map((doc) => (
+            <div key={doc.id} className="border border-slate-200 p-3 rounded-none">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-slate-400" />
+                  <span className="text-sm font-medium text-slate-800">{documentTypeLabel(doc.document_type)}</span>
+                  <Badge tone={toneForStatus(doc.verification_status)}>
+                    {doc.verification_status ? doc.verification_status.replace(/_/g, ' ') : 'PENDING'}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-2">
+                  {doc.file_attachment && (
+                    <a
+                      href={doc.file_attachment}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-slate-600 hover:text-slate-900"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      View
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleVerifyDocument(doc.id)}
+                    className="flex items-center gap-1 border border-emerald-600 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-700 rounded-none hover:bg-emerald-50"
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    Verify
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveGate({ type: 'FLAG_DOCUMENT', documentId: doc.id })}
+                    className="flex items-center gap-1 border border-red-600 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-red-700 rounded-none hover:bg-red-50"
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    Flag
+                  </button>
+                </div>
+              </div>
+              {activeGate?.type === 'FLAG_DOCUMENT' && activeGate.documentId === doc.id && (
+                <div className="mt-3">
+                  <ReasonGate
+                    label="Reason this document requires action"
+                    confirmLabel="Submit Flag"
+                    tone="red"
+                    isSubmitting={isSubmittingAction}
+                    onCancel={() => setActiveGate(null)}
+                    onConfirm={(comment) => handleFlagDocument(doc.id, comment)}
+                  />
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
 
-  // Summary metrics for the stat card strip — plain derived counts, no
-  // separate state needed since they're computed fresh on every render
-  // from the same `placements` array everything else reads from.
-  const totalPlacements = placements.length;
-  const awaitingArrivalCount = placements.filter((p) => p.arrival_state === 'AWAITING_ARRIVAL').length;
-  const housingConfirmedCount = placements.filter((p) => p.arrival_state === 'HOUSING_CONFIRMED' || p.arrival_state === 'ORIENTATION_COMPLETE').length;
-  const orientationCompleteCount = placements.filter((p) => p.arrival_state === 'ORIENTATION_COMPLETE').length;
+// ── TOP-LEVEL: HostCoordinatorDashboard ─────────────────────────────────
+export default function HostCoordinatorDashboard() {
+  const [applications, setApplications] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('All Statuses');
+  const [expandedId, setExpandedId] = useState(null);
+  const [selectedApplication, setSelectedApplication] = useState(null);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [actionError, setActionError] = useState(null);
+  const [activeRejectGate, setActiveRejectGate] = useState(null);
+  const [isSubmittingReject, setIsSubmittingReject] = useState(false);
+
+  // ── Fetch applications ─────────────────────────────────────────────────
+  const fetchApplications = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const params = {};
+      if (statusFilter !== 'All Statuses') params.status = statusFilter;
+      const response = await getHostApplications(params);
+      const data = response.data.results || response.data || [];
+      setApplications(data);
+      setTotalCount(data.length);
+    } catch (err) {
+      setError('Could not load applications. Please refresh.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [statusFilter]);
+
+  useEffect(() => {
+    fetchApplications();
+  }, [fetchApplications]);
+
+  // ── Handle row click ───────────────────────────────────────────────────
+  async function handleToggleRow(applicationId) {
+    if (expandedId === applicationId) {
+      setExpandedId(null);
+      setSelectedApplication(null);
+      return;
+    }
+    setExpandedId(applicationId);
+    setIsDetailLoading(true);
+    setActionError(null);
+    try {
+      const response = await getHostApplicationDetail(applicationId);
+      setSelectedApplication(response.data);
+    } catch (err) {
+      setActionError('Could not load application details.');
+    } finally {
+      setIsDetailLoading(false);
+    }
+  }
+
+  // ── Approve application ────────────────────────────────────────────────
+  async function handleApprove() {
+    if (!selectedApplication) return;
+    setActionError(null);
+    try {
+      await approveHostApplication(selectedApplication.id);
+      await fetchApplications();
+      // Refresh the detail
+      const response = await getHostApplicationDetail(selectedApplication.id);
+      setSelectedApplication(response.data);
+    } catch (err) {
+      const backendMessage = err?.response?.data?.detail || 'Could not approve the application.';
+      setActionError(backendMessage);
+    }
+  }
+
+  // ── Reject application ─────────────────────────────────────────────────
+  async function handleReject(reason) {
+    if (!selectedApplication) return;
+    setIsSubmittingReject(true);
+    setActionError(null);
+    try {
+      await rejectHostApplication(selectedApplication.id, reason);
+      setActiveRejectGate(null);
+      await fetchApplications();
+      const response = await getHostApplicationDetail(selectedApplication.id);
+      setSelectedApplication(response.data);
+    } catch (err) {
+      setActionError('Could not reject the application. Please retry.');
+    } finally {
+      setIsSubmittingReject(false);
+    }
+  }
+
+  // ── Stats ──────────────────────────────────────────────────────────────
+  const submittedCount = applications.filter((a) => a.status === 'SUBMITTED').length;
+  const underReviewCount = applications.filter((a) => a.status === 'UNDER_REVIEW').length;
+  const complianceCount = applications.filter((a) => a.status === 'COMPLIANCE_PHASE').length;
 
   return (
     <div className="bg-slate-100 p-6">
-      <div className="mx-auto max-w-6xl space-y-6">
+      <div className="mx-auto max-w-7xl space-y-6">
+        {/* Header */}
         <header className="flex flex-wrap items-center justify-between gap-4 border border-slate-200 bg-white shadow-sm rounded-none p-6">
           <div className="flex items-center gap-2">
             <Users className="h-5 w-5 text-slate-500" />
             <div>
               <h1 className="text-lg font-bold text-slate-900">Host Coordinator Dashboard</h1>
-              <p className="text-xs text-slate-500">Tracking {totalPlacements} inbound student placement(s)</p>
+              <p className="text-xs text-slate-500">Manage applications for your assigned university</p>
             </div>
           </div>
-          <CustomDropdown label="Arrival State" value={arrivalFilter} options={ARRIVAL_FILTER_OPTIONS} onChange={setArrivalFilter} />
+          <CustomDropdown label="Status Filter" value={statusFilter} options={STATUS_FILTER_OPTIONS} onChange={setStatusFilter} />
         </header>
 
-        {/* Demo-mode notice — honest about the data source, not hidden from
-            the person presenting this. Remove once real endpoints exist. */}
-        <div className="flex items-center gap-2 border border-amber-300 bg-amber-50 px-4 py-2 text-xs text-amber-800 rounded-none">
-          <ClipboardList className="h-3.5 w-3.5 shrink-0" />
-          Placement and logistics endpoints are still being built on the backend — this view runs on illustrative sample data.
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-4">
+          <div className="border border-slate-200 bg-white p-4 shadow-sm rounded-none">
+            <p className="text-2xl font-bold text-amber-600">{submittedCount}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Submitted</p>
+          </div>
+          <div className="border border-slate-200 bg-white p-4 shadow-sm rounded-none">
+            <p className="text-2xl font-bold text-orange-600">{underReviewCount}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Under Review</p>
+          </div>
+          <div className="border border-slate-200 bg-white p-4 shadow-sm rounded-none">
+            <p className="text-2xl font-bold text-emerald-600">{complianceCount}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Compliance Phase</p>
+          </div>
         </div>
 
-        {/* Summary stat card strip */}
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <StatCard icon={Users} label="Total Placements" value={totalPlacements} tone="slate" />
-          <StatCard icon={CalendarClock} label="Awaiting Arrival" value={awaitingArrivalCount} tone="amber" />
-          <StatCard icon={Home} label="Housing Confirmed" value={housingConfirmedCount} tone="navy" />
-          <StatCard icon={UserCheck} label="Orientation Complete" value={orientationCompleteCount} tone="emerald" />
-        </div>
+        {/* Error display */}
+        {error && (
+          <div className="flex items-center gap-2 border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 rounded-none">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            {error}
+          </div>
+        )}
 
+        {/* Applications Table */}
         <section className="border border-slate-200 bg-white shadow-sm rounded-none">
-          {visiblePlacements.length === 0 ? (
-            <EmptyState label="No placements match the current filter." />
+          {isLoading ? (
+            <LoadingRow label="Loading applications…" />
+          ) : applications.length === 0 ? (
+            <EmptyState label="No applications for your assigned university." />
           ) : (
             <table className="w-full border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   <th className="w-8 px-4 py-2" />
                   <th className="px-4 py-2">Student</th>
-                  <th className="px-4 py-2">Home University</th>
-                  <th className="px-4 py-2">Program Term</th>
-                  <th className="px-4 py-2">Expected Arrival</th>
-                  <th className="px-4 py-2">Arrival State</th>
+                  <th className="px-4 py-2">University</th>
+                  <th className="px-4 py-2">Status</th>
+                  <th className="px-4 py-2">Submitted</th>
                 </tr>
               </thead>
               <tbody>
-                {visiblePlacements.map((placement) => (
-                  <Fragment key={placement.id}>
-                    <tr onClick={() => toggleRow(placement.id)} className="cursor-pointer border-b border-slate-100 hover:bg-slate-50">
+                {applications.map((app) => (
+                  <Fragment key={app.id}>
+                    <tr onClick={() => handleToggleRow(app.id)} className="cursor-pointer border-b border-slate-100 hover:bg-slate-50">
                       <td className="px-4 py-3 text-slate-400">
-                        <ChevronRight className={`h-4 w-4 transition-transform ${expandedId === placement.id ? 'rotate-90' : ''}`} />
+                        <ChevronRight className={`h-4 w-4 transition-transform ${expandedId === app.id ? 'rotate-90' : ''}`} />
                       </td>
-                      <td className="px-4 py-3 font-medium text-slate-800">{placement.student_name}</td>
-                      <td className="px-4 py-3 text-slate-600">{placement.home_university}</td>
-                      <td className="px-4 py-3 text-slate-600">{placement.program_term}</td>
-                      <td className="px-4 py-3 text-slate-600">{placement.expected_arrival_date}</td>
+                      <td className="px-4 py-3 font-medium text-slate-800">{app.student_name || app.student_detail?.full_name || 'Student'}</td>
+                      <td className="px-4 py-3 text-slate-600">{app.university_name || app.destination_university?.name || 'University'}</td>
                       <td className="px-4 py-3">
-                        <Badge tone={toneForArrivalState(placement.arrival_state)}>{placement.arrival_state.replace(/_/g, ' ')}</Badge>
+                        <Badge tone={toneForStatus(app.status)}>{app.status ? app.status.replace(/_/g, ' ') : 'DRAFT'}</Badge>
                       </td>
+                      <td className="px-4 py-3 text-slate-500">{app.submitted_at ? new Date(app.submitted_at).toLocaleDateString() : '—'}</td>
                     </tr>
 
-                    {expandedId === placement.id && (
+                    {/* Expanded Detail Row */}
+                    {expandedId === app.id && (
                       <tr className="border-b border-slate-100 bg-slate-50">
-                        <td colSpan={6} className="space-y-4 px-4 py-4">
-                          <div>
-                            <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Arrival Pipeline</h3>
-                            <ArrivalStepper currentStateKey={placement.arrival_state} placementId={placement.id} onAdvance={handleAdvanceArrival} />
-                          </div>
-                          <div>
-                            <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Logistics Checklist</h3>
-                            <LogisticsChecklist placementId={placement.id} tasks={placement.logistics_checklist} onToggle={handleToggleTask} />
-                          </div>
+                        <td colSpan={5} className="px-4 py-4">
+                          {isDetailLoading ? (
+                            <LoadingRow label="Loading details…" />
+                          ) : selectedApplication ? (
+                            <div className="space-y-4">
+                              {/* Application Info */}
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Application #{selectedApplication.id}</p>
+                                  <p className="text-sm text-slate-600">
+                                    GPA at submission: {selectedApplication.gpa_at_submission || 'N/A'}
+                                  </p>
+                                  {selectedApplication.rejection_reason && (
+                                    <p className="text-sm text-red-600">Rejection reason: {selectedApplication.rejection_reason}</p>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {selectedApplication.status === 'APPROVED' && (
+                                    <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600">
+                                      <CheckCircle2 className="h-4 w-4" />
+                                      Approved
+                                    </span>
+                                  )}
+                                  {selectedApplication.status === 'REJECTED' && (
+                                    <span className="flex items-center gap-1 text-xs font-semibold text-red-600">
+                                      <XCircle className="h-4 w-4" />
+                                      Rejected
+                                    </span>
+                                  )}
+                                  {selectedApplication.status !== 'APPROVED' && selectedApplication.status !== 'REJECTED' && (
+                                    <div className="flex gap-2">
+                                      {activeRejectGate === selectedApplication.id ? (
+                                        <ReasonGate
+                                          label="Reason for rejecting this application"
+                                          confirmLabel="Confirm Rejection"
+                                          tone="red"
+                                          isSubmitting={isSubmittingReject}
+                                          onCancel={() => setActiveRejectGate(null)}
+                                          onConfirm={handleReject}
+                                        />
+                                      ) : (
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() => setActiveRejectGate(selectedApplication.id)}
+                                            className="flex items-center gap-1.5 border border-red-600 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-red-700 rounded-none hover:bg-red-50"
+                                          >
+                                            <XCircle className="h-3.5 w-3.5" />
+                                            Reject
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={handleApprove}
+                                            className="flex items-center gap-1.5 border border-slate-800 bg-slate-800 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white rounded-none hover:bg-slate-900"
+                                          >
+                                            <CheckCircle2 className="h-3.5 w-3.5" />
+                                            Approve
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {actionError && (
+                                <div className="flex items-center gap-2 border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 rounded-none">
+                                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                  {actionError}
+                                </div>
+                              )}
+
+                              {/* Document Inspector */}
+                              <DocumentInspector
+                                applicationId={selectedApplication.id}
+                                onActionComplete={() => {
+                                  // Refresh after document action
+                                  getHostApplicationDetail(selectedApplication.id).then((res) => setSelectedApplication(res.data));
+                                  fetchApplications();
+                                }}
+                              />
+                            </div>
+                          ) : (
+                            <p className="text-sm text-slate-400">Could not load details.</p>
+                          )}
                         </td>
                       </tr>
                     )}

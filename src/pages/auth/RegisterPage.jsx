@@ -1,8 +1,6 @@
 // src/pages/auth/RegisterPage.jsx
 // Registration page with role selector, student-type toggle
-// (University Exchange Student vs High School Applicant), and a
-// dynamic "unlisted home university" notice that explains the
-// onboarding path for institutions not yet in our catalog.
+// (University Exchange Student vs High School Applicant).
 
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
@@ -20,7 +18,6 @@ const ROLES = [
 ];
 
 // Student sub-type toggle — map to backend User.StudentType choices.
-// This is the "High School Applicant Toggle" your teacher requested.
 const STUDENT_TYPES = [
   {
     value: 'UNDERGRADUATE',
@@ -52,13 +49,16 @@ export default function RegisterPage() {
     major: '',
     home_institution: '',
     enrollment_year: '',
+    host_university: '',
   });
 
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
+  const [success, setSuccess] = useState(false);
 
   const isStudent = form.role === 'STUDENT';
+  const isHostCoord = form.role === 'HOST_COORD';
   const isHighSchool = form.student_type === 'HIGH_SCHOOL';
   const isUniversityStudent = isStudent && !isHighSchool;
 
@@ -68,9 +68,7 @@ export default function RegisterPage() {
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: '' }));
   };
 
-  // Client-side validation mirrors the backend serializer rules exactly.
-  // High school applicants skip the GPA/major requirement entirely —
-  // the backend's requires_gpa_check property does the same skip.
+  // Client-side validation
   const validate = () => {
     const e = {};
     if (!form.email) e.email = 'Email is required.';
@@ -80,6 +78,10 @@ export default function RegisterPage() {
     if (form.password.length < 8) e.password = 'Minimum 8 characters.';
     if (form.password !== form.password_confirm)
       e.password_confirm = 'Passwords do not match.';
+
+    if (isHostCoord && !form.host_university) {
+      e.host_university = 'Please select a university for Host Coordinator.';
+    }
 
     if (isUniversityStudent) {
       if (!form.gpa) e.gpa = 'GPA is required for university exchange students.';
@@ -103,38 +105,58 @@ export default function RegisterPage() {
 
     setLoading(true);
 
-    // Build payload — only include student fields when role is STUDENT,
-    // and only include gpa/major when not a high school applicant
+    // Build payload
     const payload = {
       email: form.email,
       first_name: form.first_name,
       last_name: form.last_name,
       role: form.role,
       password: form.password,
-      password_confirm: form.password_confirm,
-      ...(isStudent && {
-        student_type: form.student_type,
-        home_institution: form.home_institution || undefined,
-        ...(isUniversityStudent && {
-          gpa: form.gpa,
-          major: form.major,
-          enrollment_year: form.enrollment_year || undefined,
-        }),
-      }),
     };
 
-    const user = await register(payload).catch((err) => {
-      const data = err.response?.data;
-      if (data && typeof data === 'object') setErrors(data);
-      else setApiError('Registration failed. Please try again.');
+    // Add host_university for Host Coordinators
+    if (isHostCoord) {
+      payload.host_university = parseInt(form.host_university);
+    }
+
+    // Add student fields
+    if (isStudent) {
+      payload.student_type = form.student_type;
+      payload.home_institution = form.home_institution || '';
+      if (isUniversityStudent) {
+        payload.gpa = parseFloat(form.gpa);
+        payload.major = form.major;
+        payload.enrollment_year = form.enrollment_year ? parseInt(form.enrollment_year) : null;
+      }
+    }
+
+    try {
+      const user = await register(payload);
+      setSuccess(true);
+      
+      // Route to the correct dashboard
+      if (user.role === 'STUDENT') navigate('/student');
+      else if (user.role === 'HOME_ADMIN') navigate('/admin');
+      else if (user.role === 'HOST_COORD') navigate('/coordinator');
+    } catch (err) {
+      const data = err?.response?.data;
+      if (data && typeof data === 'object') {
+        // Handle field-specific errors
+        const fieldErrors = {};
+        Object.keys(data).forEach((key) => {
+          if (Array.isArray(data[key])) {
+            fieldErrors[key] = data[key][0];
+          } else {
+            fieldErrors[key] = data[key];
+          }
+        });
+        setErrors(fieldErrors);
+        setApiError('Please fix the errors below.');
+      } else {
+        setApiError('Registration failed. Please try again.');
+      }
       setLoading(false);
-    });
-
-    if (!user) return;
-
-    if (user.role === 'STUDENT') navigate('/student');
-    else if (user.role === 'HOME_ADMIN') navigate('/admin');
-    else if (user.role === 'HOST_COORD') navigate('/coordinator');
+    }
   };
 
   return (
@@ -149,16 +171,23 @@ export default function RegisterPage() {
           </div>
         </div>
 
-        <div className="panel">
-          <div className="panel-header">
-            <span className="section-title">Account Registration</span>
+        <div className="bg-white border border-surface-200 rounded shadow-sm">
+          <div className="px-5 py-3.5 border-b border-surface-200 flex items-center justify-between">
+            <span className="text-sm font-semibold text-ink-900 uppercase tracking-wide">Account Registration</span>
           </div>
 
-          <div className="panel-body">
+          <div className="px-5 py-4">
             {apiError && (
-              <div className="alert-error mb-5">
-                <AlertCircle size={15} className="shrink-0" />
+              <div className="flex items-start gap-3 p-3.5 bg-crimson-50 border border-crimson-100 rounded text-sm text-crimson-700 mb-5">
+                <AlertCircle size={15} className="shrink-0 mt-0.5" />
                 <span>{apiError}</span>
+              </div>
+            )}
+
+            {success && (
+              <div className="flex items-start gap-3 p-3.5 bg-emerald-50 border border-emerald-200 rounded text-sm text-emerald-700 mb-5">
+                <CheckCircle size={15} className="shrink-0 mt-0.5" />
+                <span>Account created successfully! Redirecting to your dashboard...</span>
               </div>
             )}
 
@@ -166,14 +195,14 @@ export default function RegisterPage() {
 
               {/* Role selector */}
               <div>
-                <label className="input-label">Account type</label>
+                <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">Account type</label>
                 <div className="grid grid-cols-3 gap-2">
                   {ROLES.map((r) => (
                     <button
                       key={r.value}
                       type="button"
                       onClick={() => setForm((prev) => ({ ...prev, role: r.value }))}
-                      className={`text-left p-3 rounded border text-xs transition-colors ${
+                      className={`text-left p-3 border text-xs transition-colors rounded-none ${
                         form.role === r.value
                           ? 'border-navy-500 bg-navy-50 text-navy-700'
                           : 'border-surface-300 bg-white text-ink-700 hover:border-surface-300'
@@ -189,14 +218,32 @@ export default function RegisterPage() {
                 </div>
               </div>
 
-              {/* ── HIGH SCHOOL APPLICANT TOGGLE ──────────────────────────
-                  Only shows when role === STUDENT. Lets the person pick
-                  between a currently-enrolled university student and a
-                  high school applicant exploring options. This single
-                  toggle changes which fields are required below. */}
+              {/* Host Coordinator - University Selection */}
+              {isHostCoord && (
+                <div>
+                  <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">
+                    Assigned University <span className="text-crimson-600">*</span>
+                  </label>
+                  <select
+                    name="host_university"
+                    value={form.host_university}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 bg-white border border-surface-300 rounded text-sm text-ink-900 focus:border-gold-500 focus:outline-none"
+                  >
+                    <option value="">Select a university...</option>
+                    <option value="1">Harvard University</option>
+                    <option value="2">Stanford University</option>
+                    <option value="3">University of Cambridge</option>
+                    {/* Add more universities as needed */}
+                  </select>
+                  {errors.host_university && <p className="text-xs text-crimson-600 mt-1">{errors.host_university}</p>}
+                </div>
+              )}
+
+              {/* Student category toggle */}
               {isStudent && (
                 <div>
-                  <label className="input-label">Student category</label>
+                  <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">Student category</label>
                   <div className="grid grid-cols-2 gap-2">
                     {STUDENT_TYPES.map((t) => {
                       const Icon = t.icon;
@@ -206,7 +253,7 @@ export default function RegisterPage() {
                           key={t.value}
                           type="button"
                           onClick={() => setForm((prev) => ({ ...prev, student_type: t.value }))}
-                          className={`text-left p-3 rounded border text-xs transition-colors ${
+                          className={`text-left p-3 border text-xs transition-colors rounded-none ${
                             active
                               ? 'border-navy-500 bg-navy-50 text-navy-700'
                               : 'border-surface-300 bg-white text-ink-700 hover:border-surface-300'
@@ -227,116 +274,169 @@ export default function RegisterPage() {
               {/* Name row */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="input-label">First name</label>
-                  <input name="first_name" value={form.first_name} onChange={handleChange} className="input-field" placeholder="Ada" />
-                  {errors.first_name && <p className="input-error">{errors.first_name}</p>}
+                  <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">First name</label>
+                  <input
+                    name="first_name"
+                    value={form.first_name}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 bg-white border border-surface-300 rounded text-sm text-ink-900 focus:border-gold-500 focus:outline-none"
+                    placeholder="Ada"
+                  />
+                  {errors.first_name && <p className="text-xs text-crimson-600 mt-1">{errors.first_name}</p>}
                 </div>
                 <div>
-                  <label className="input-label">Last name</label>
-                  <input name="last_name" value={form.last_name} onChange={handleChange} className="input-field" placeholder="Lovelace" />
-                  {errors.last_name && <p className="input-error">{errors.last_name}</p>}
+                  <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">Last name</label>
+                  <input
+                    name="last_name"
+                    value={form.last_name}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 bg-white border border-surface-300 rounded text-sm text-ink-900 focus:border-gold-500 focus:outline-none"
+                    placeholder="Lovelace"
+                  />
+                  {errors.last_name && <p className="text-xs text-crimson-600 mt-1">{errors.last_name}</p>}
                 </div>
               </div>
 
               <div>
-                <label className="input-label">Email</label>
-                <input type="email" name="email" value={form.email} onChange={handleChange} className="input-field" placeholder="you@institution.edu" />
-                {errors.email && <p className="input-error">{errors.email}</p>}
+                <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">Email</label>
+                <input
+                  type="email"
+                  name="email"
+                  value={form.email}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 bg-white border border-surface-300 rounded text-sm text-ink-900 focus:border-gold-500 focus:outline-none"
+                  placeholder="you@institution.edu"
+                />
+                {errors.email && <p className="text-xs text-crimson-600 mt-1">{errors.email}</p>}
               </div>
 
-              {/* ── UNIVERSITY EXCHANGE STUDENT FIELDS ────────────────── */}
+              {/* University Student Fields */}
               {isUniversityStudent && (
                 <>
-                  <div className="divider" />
-                  <p className="text-xs font-medium text-ink-500 uppercase tracking-wide">
-                    Academic information
-                  </p>
+                  <div className="border-t border-surface-200 my-4" />
+                  <p className="text-xs font-medium text-ink-500 uppercase tracking-wide">Academic information</p>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="input-label">Current GPA (0.00–4.00)</label>
-                      <input type="number" name="gpa" value={form.gpa} onChange={handleChange} step="0.01" min="0" max="4" className="input-field" placeholder="3.80" />
-                      {errors.gpa && <p className="input-error">{errors.gpa}</p>}
+                      <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">Current GPA (0.00–4.00)</label>
+                      <input
+                        type="number"
+                        name="gpa"
+                        value={form.gpa}
+                        onChange={handleChange}
+                        step="0.01"
+                        min="0"
+                        max="4"
+                        className="w-full px-3 py-2 bg-white border border-surface-300 rounded text-sm text-ink-900 focus:border-gold-500 focus:outline-none"
+                        placeholder="3.80"
+                      />
+                      {errors.gpa && <p className="text-xs text-crimson-600 mt-1">{errors.gpa}</p>}
                     </div>
                     <div>
-                      <label className="input-label">Enrollment year</label>
-                      <input type="number" name="enrollment_year" value={form.enrollment_year} onChange={handleChange} className="input-field" placeholder="2022" />
+                      <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">Enrollment year</label>
+                      <input
+                        type="number"
+                        name="enrollment_year"
+                        value={form.enrollment_year}
+                        onChange={handleChange}
+                        className="w-full px-3 py-2 bg-white border border-surface-300 rounded text-sm text-ink-900 focus:border-gold-500 focus:outline-none"
+                        placeholder="2022"
+                      />
                     </div>
                   </div>
 
                   <div>
-                    <label className="input-label">Declared major</label>
-                    <input name="major" value={form.major} onChange={handleChange} className="input-field" placeholder="Computer Science" />
-                    {errors.major && <p className="input-error">{errors.major}</p>}
+                    <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">Declared major</label>
+                    <input
+                      name="major"
+                      value={form.major}
+                      onChange={handleChange}
+                      className="w-full px-3 py-2 bg-white border border-surface-300 rounded text-sm text-ink-900 focus:border-gold-500 focus:outline-none"
+                      placeholder="Computer Science"
+                    />
+                    {errors.major && <p className="text-xs text-crimson-600 mt-1">{errors.major}</p>}
                   </div>
 
                   <div>
-                    <label className="input-label">Home institution</label>
-                    <input name="home_institution" value={form.home_institution} onChange={handleChange} className="input-field" placeholder="University of Nairobi" />
-                    {errors.home_institution && <p className="input-error">{errors.home_institution}</p>}
-
-                    {/* ── UNLISTED UNIVERSITY NOTICE ──────────────────────
-                        Tells students their home institution does NOT need
-                        to be in our catalog. Only the destination must
-                        exist there. This satisfies the teacher's concern
-                        about students from unregistered universities. */}
-                    <div className="alert-info mt-2">
+                    <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">Home institution</label>
+                    <input
+                      name="home_institution"
+                      value={form.home_institution}
+                      onChange={handleChange}
+                      className="w-full px-3 py-2 bg-white border border-surface-300 rounded text-sm text-ink-900 focus:border-gold-500 focus:outline-none"
+                      placeholder="University of Nairobi"
+                    />
+                    {errors.home_institution && <p className="text-xs text-crimson-600 mt-1">{errors.home_institution}</p>}
+                    <div className="flex items-start gap-3 p-3 mt-2 bg-navy-50 border border-navy-200 rounded text-sm text-navy-700">
                       <Info size={14} className="shrink-0 mt-0.5" />
                       <span>
-                        Your home institution does not need to be registered with
-                        GlobalScholar — type it freely. Only your{' '}
-                        <strong>destination</strong> university must exist in our
-                        catalog for you to apply.
+                        Your home institution does not need to be registered with GlobalScholar — type it freely. Only your{' '}
+                        <strong>destination</strong> university must exist in our catalog for you to apply.
                       </span>
                     </div>
                   </div>
                 </>
               )}
 
-              {/* ── HIGH SCHOOL APPLICANT NOTICE ──────────────────────── */}
+              {/* High School Applicant Notice */}
               {isHighSchool && (
                 <>
-                  <div className="divider" />
-                  <div className="alert-info">
+                  <div className="border-t border-surface-200 my-4" />
+                  <div className="flex items-start gap-3 p-3 bg-navy-50 border border-navy-200 rounded text-sm text-navy-700">
                     <School size={14} className="shrink-0 mt-0.5" />
                     <span>
-                      No GPA or major needed. After registering you can browse
-                      universities freely. When you apply, your application is
-                      flagged for manual review by the destination's Home
-                      Administrator, who will request your diploma and
-                      reference letters instead of a university transcript.
+                      No GPA or major needed. After registering you can browse universities freely. When you apply, your
+                      application is flagged for manual review.
                     </span>
                   </div>
-
-                  <div className="mt-3">
-                    <label className="input-label">Current school (optional)</label>
+                  <div>
+                    <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">Current school (optional)</label>
                     <input
                       name="home_institution"
                       value={form.home_institution}
                       onChange={handleChange}
-                      className="input-field"
+                      className="w-full px-3 py-2 bg-white border border-surface-300 rounded text-sm text-ink-900 focus:border-gold-500 focus:outline-none"
                       placeholder="Nairobi School"
                     />
                   </div>
                 </>
               )}
 
-              <div className="divider" />
+              <div className="border-t border-surface-200 my-4" />
 
+              {/* Password */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="input-label">Password</label>
-                  <input type="password" name="password" value={form.password} onChange={handleChange} className="input-field" placeholder="Min. 8 characters" />
-                  {errors.password && <p className="input-error">{errors.password}</p>}
+                  <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">Password</label>
+                  <input
+                    type="password"
+                    name="password"
+                    value={form.password}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 bg-white border border-surface-300 rounded text-sm text-ink-900 focus:border-gold-500 focus:outline-none"
+                    placeholder="Min. 8 characters"
+                  />
+                  {errors.password && <p className="text-xs text-crimson-600 mt-1">{errors.password}</p>}
                 </div>
                 <div>
-                  <label className="input-label">Confirm password</label>
-                  <input type="password" name="password_confirm" value={form.password_confirm} onChange={handleChange} className="input-field" placeholder="Repeat password" />
-                  {errors.password_confirm && <p className="input-error">{errors.password_confirm}</p>}
+                  <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">Confirm password</label>
+                  <input
+                    type="password"
+                    name="password_confirm"
+                    value={form.password_confirm}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 bg-white border border-surface-300 rounded text-sm text-ink-900 focus:border-gold-500 focus:outline-none"
+                    placeholder="Repeat password"
+                  />
+                  {errors.password_confirm && <p className="text-xs text-crimson-600 mt-1">{errors.password_confirm}</p>}
                 </div>
               </div>
 
-              <button type="submit" disabled={loading} className="btn-primary w-full justify-center">
+              <button
+                type="submit"
+                disabled={loading}
+                className="inline-flex items-center justify-center gap-2 w-full px-4 py-2 bg-navy-800 hover:bg-navy-900 text-white text-sm font-medium rounded border border-transparent transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
                 {loading ? (
                   <>
                     <Loader2 size={14} className="animate-spin" /> Creating account...

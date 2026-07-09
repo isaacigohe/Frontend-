@@ -45,7 +45,6 @@ import {
 } from '../../api/students';
 import { bulkUploadDocuments } from '../../api/client';
 import { documentTypeLabel, advisoryBadgeMeta, LANGUAGE_CHOICES, Badge } from './shared/DashboardUI';
-import { Link } from 'react-router-dom';
 
 // ── STATIC CONFIG ──────────────────────────────────────────────────────────────
 const PIPELINE_STAGES = [
@@ -443,7 +442,6 @@ function ComplianceVault({ onChecklistChange }) {
     item.verification_status === 'ACTION_REQUIRED'
   );
 
-  // If there's an error, show it
   if (error) {
     return (
       <section className="border border-slate-200 bg-white shadow-sm rounded-none">
@@ -610,6 +608,7 @@ function UniversityCatalog({ existingApplications, onApplied }) {
   const [expandedUniversity, setExpandedUniversity] = useState(null);
   const [programsCache, setProgramsCache] = useState({});
   const [applyingToProgram, setApplyingToProgram] = useState(null);
+  const [applyingToUniversity, setApplyingToUniversity] = useState(null);
   const [applyError, setApplyError] = useState(null);
 
   // Debounce search
@@ -650,6 +649,10 @@ function UniversityCatalog({ existingApplications, onApplied }) {
     return existingApplications.find((app) => app.program === programId);
   };
 
+  const hasAppliedToUniversity = (universityId) => {
+    return existingApplications.some((app) => app.destination_university === universityId);
+  };
+
   async function handleToggleUniversity(universityId) {
     if (expandedUniversity === universityId) {
       setExpandedUniversity(null);
@@ -670,13 +673,31 @@ function UniversityCatalog({ existingApplications, onApplied }) {
     }
   }
 
+  async function handleApplyToUniversity(universityId) {
+    setApplyingToUniversity(universityId);
+    setApplyError(null);
+    try {
+      await applyToUniversity(universityId);
+      if (onApplied) await onApplied();
+    } catch (err) {
+      const responseData = err?.response?.data;
+      let message = 'Could not apply to this university.';
+      if (typeof responseData === 'object') {
+        const firstKey = Object.keys(responseData)[0];
+        message = responseData[firstKey]?.[0] || message;
+      }
+      setApplyError(message);
+    } finally {
+      setApplyingToUniversity(null);
+    }
+  }
+
   async function handleApplyToProgram(universityId, programId) {
     setApplyingToProgram(programId);
     setApplyError(null);
     try {
       await applyToProgram(universityId, programId);
       if (onApplied) await onApplied();
-      // Refresh programs
       const programs = await getUniversityProgramsList(universityId);
       setProgramsCache((prev) => ({ ...prev, [universityId]: { status: 'ready', programs: programs || [] } }));
     } catch (err) {
@@ -757,7 +778,8 @@ function UniversityCatalog({ existingApplications, onApplied }) {
           {universities.map((uni) => {
             const isExpanded = expandedUniversity === uni.id;
             const cache = programsCache[uni.id];
-            const hasApplied = existingApplications.some((app) => app.destination_university === uni.id);
+            const alreadyAppliedToUniversity = hasAppliedToUniversity(uni.id);
+            const isApplyingToUni = applyingToUniversity === uni.id;
 
             return (
               <div key={uni.id} className="border-b border-slate-100">
@@ -769,7 +791,7 @@ function UniversityCatalog({ existingApplications, onApplied }) {
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-3">
                       <span className="text-sm font-semibold text-slate-800">{uni.name}</span>
-                      {hasApplied && (
+                      {alreadyAppliedToUniversity && (
                         <span className="border border-emerald-500 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
                           Applied
                         </span>
@@ -780,7 +802,27 @@ function UniversityCatalog({ existingApplications, onApplied }) {
                       {uni.city ? `${uni.city}, ` : ''}{uni.country} · {uni.primary_language}
                     </p>
                   </div>
-                  <ChevronDown className={`h-5 w-5 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                  <div className="flex items-center gap-2">
+                    {/* NEW: Apply to University button */}
+                    {!alreadyAppliedToUniversity && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleApplyToUniversity(uni.id);
+                        }}
+                        disabled={isApplyingToUni}
+                        className="border border-slate-600 bg-slate-600 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white rounded-none hover:bg-slate-700 disabled:opacity-50"
+                      >
+                        {isApplyingToUni ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          'Apply to University'
+                        )}
+                      </button>
+                    )}
+                    <ChevronDown className={`h-5 w-5 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                  </div>
                 </div>
 
                 {/* Programs List (expanded) */}
@@ -839,7 +881,7 @@ function UniversityCatalog({ existingApplications, onApplied }) {
                                       disabled={isApplying}
                                       className="border border-slate-800 bg-slate-800 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white rounded-none hover:bg-slate-900 disabled:opacity-50"
                                     >
-                                      {isApplying ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Apply'}
+                                      {isApplying ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Apply to Program'}
                                     </button>
                                   )}
                                 </div>
@@ -905,7 +947,6 @@ export default function StudentDashboard() {
   const [isTogglingHighSchool, setIsTogglingHighSchool] = useState(false);
   const [checklist, setChecklist] = useState([]);
   const [hasActionRequiredItems, setHasActionRequiredItems] = useState(false);
-  const [isChecklistLoading, setIsChecklistLoading] = useState(true);
 
   const loadInitialData = useCallback(async () => {
     setIsProfileLoading(true);

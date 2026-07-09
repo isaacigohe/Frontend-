@@ -29,6 +29,7 @@ import {
   CalendarClock,
   Edit,
   Trash2,
+  ChevronDown,
 } from 'lucide-react';
 import { CustomDropdown, Badge, PaginationFooter, LoadingRow, EmptyState, documentTypeLabel, LANGUAGE_CHOICES, degreeLevelLabel } from './shared/DashboardUI';
 import {

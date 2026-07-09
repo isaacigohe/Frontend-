@@ -18,11 +18,8 @@ const apiClient = axios.create({
 });
 
 // ── REQUEST INTERCEPTOR ────────────────────────────────────────────────────
-// Only add Authorization header if we have a token AND the request is NOT
-// to a public endpoint.
 apiClient.interceptors.request.use(
   (config) => {
-    // List of public endpoints that don't need authentication
     const publicEndpoints = [
       '/universities/',
       '/universities',
@@ -31,7 +28,6 @@ apiClient.interceptors.request.use(
       '/auth/token/refresh/',
     ];
     
-    // Check if this request is to a public endpoint
     const isPublic = publicEndpoints.some((endpoint) => config.url?.startsWith(endpoint));
     
     if (!isPublic) {
@@ -52,7 +48,6 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // Only attempt refresh on 401 if this wasn't already a retry
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
@@ -67,14 +62,12 @@ apiClient.interceptors.response.use(
             return apiClient(originalRequest);
           }
         } catch (refreshError) {
-          // Refresh failed, clear session
           localStorage.removeItem(TOKEN_KEYS.ACCESS);
           localStorage.removeItem(TOKEN_KEYS.REFRESH);
           localStorage.removeItem(TOKEN_KEYS.USER);
           window.location.href = '/login';
         }
       } else {
-        // No refresh token, redirect to login
         localStorage.removeItem(TOKEN_KEYS.ACCESS);
         localStorage.removeItem(TOKEN_KEYS.REFRESH);
         localStorage.removeItem(TOKEN_KEYS.USER);
@@ -100,7 +93,7 @@ export const refreshAccessToken = (refreshToken) => apiClient.post('/auth/token/
 export const getMyProfile    = () => apiClient.get('/users/me/');
 export const updateMyProfile = (data) => apiClient.patch('/users/me/', data);
 
-// ── Universities (PUBLIC - no token needed) ─────────────────────────────
+// ── Universities (PUBLIC) ────────────────────────────────────────────────
 export const getUniversities = (params = {}) => apiClient.get('/universities/', { params });
 export const getUniversity   = (id) => apiClient.get(`/universities/${id}/`);
 export const createUniversity = (data) => apiClient.post('/universities/', data);
@@ -110,6 +103,8 @@ export const updateUniversity = (id, data) => apiClient.patch(`/universities/${i
 export const getUniversityPrograms = (universityId) => apiClient.get(`/universities/${universityId}/programs/`);
 export const getProgram   = (id) => apiClient.get(`/programs/${id}/`);
 export const createProgram = (universityId, data) => apiClient.post(`/universities/${universityId}/programs/`, data);
+export const updateProgram = (id, data) => apiClient.patch(`/programs/${id}/`, data);
+export const deleteProgram = (id) => apiClient.delete(`/programs/${id}/`);
 
 // ── Applications ─────────────────────────────────────────────────────────
 export const getApplications  = (params = {}) => apiClient.get('/applications/', { params });

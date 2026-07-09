@@ -16,6 +16,7 @@
 //   - Added keyboard shortcuts (Escape to close, Enter to submit)
 //   - Added loading states and better error handling
 //   - Added visual polish to the split-panel layout
+//   - Fixed footer overlap with min-height instead of fixed height
 // =============================================================================
 
 import { useState, useEffect, useCallback } from 'react';
@@ -675,7 +676,7 @@ export default function AdminReviewDesk() {
   const [isRegisterPanelOpen, setIsRegisterPanelOpen] = useState(false);
 
   return (
-    <div className="bg-slate-100 p-6">
+    <div className="bg-slate-100 p-6 pb-6">
       <div className="mx-auto max-w-7xl">
         <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -698,7 +699,8 @@ export default function AdminReviewDesk() {
           onRegistered={() => setQueueRefreshToken((n) => n + 1)}
         />
 
-        <div className="grid h-[75vh] grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+        {/* FIXED: Changed h-[75vh] to min-h-[600px] to prevent footer overlap */}
+        <div className="grid min-h-[600px] grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
           <ApplicantQueue key={queueRefreshToken} selectedId={selectedId} onSelect={setSelectedId} />
           <DocumentInspector applicationId={selectedId} onApplicationMutated={() => setQueueRefreshToken((n) => n + 1)} />
         </div>

@@ -14,12 +14,8 @@
 //      dividers, no cards). Clicking a row lazily fetches that university's
 //      programs and slides open a detail drawer beneath it.
 //
-// STATE MODEL (see the written explanation at the bottom of the setup
-// guide in chat for the full walkthrough):
-//   - `expandedId`     — which single university's drawer is open (or null)
-//   - `programsCache`  — { [universityId]: { status, programs, error } },
-//                         so re-opening a row you already expanded once
-//                         does not re-fetch over the network.
+// NEW: University images are displayed using the `image_url` field from
+// the backend. If no image exists, a fallback placeholder is shown.
 // =============================================================================
 
 import { useState, useEffect, useCallback } from 'react';
@@ -36,35 +32,19 @@ import {
   MapPin,
   LogIn,
   UserPlus,
+  Building2,
 } from 'lucide-react';
 import { CustomDropdown, Badge, PaginationFooter, LoadingRow, EmptyState, advisoryBadgeMeta, LANGUAGE_CHOICES, degreeLevelLabel } from './shared/DashboardUI';
 import { getPublicUniversities, getUniversityPrograms } from '../../api/public';
 
 const PAGE_SIZE = 10;
 const COUNTRY_OPTIONS = ['All Countries', 'United States', 'United Kingdom', 'Germany', 'Japan', 'South Korea', 'Australia', 'France', 'Spain'];
-// CONFIRMED against University.Language — replaces a guessed list that
-// included "Japanese"/"Korean", neither of which is a real backend choice.
 const LANGUAGE_OPTIONS = ['All Languages', ...LANGUAGE_CHOICES];
 
-// NOTE: the old numeric ADVISORY_TONE/KNOWN_ADVISORY_LEVELS constants have
-// been removed. CONFIRMED against universities/models.py:
-// travel_advisory_level is a string-code TextChoices (UNKNOWN, NORMAL,
-// LEVEL_1..LEVEL_4), not a number — advisoryBadgeMeta() from
-// shared/DashboardUI.jsx is now the single source of truth for this.
-
-// -----------------------------------------------------------------------------
-// HeroSection — the high-impact top-of-page block. The image wrapper is a
-// plain <div> with a background-image style hook: pass a real photography
-// URL in `backgroundImageUrl` once you have one, and it drops in with zero
-// other changes. Until then it renders the navy gradient + a centered
-// ImageIcon placeholder so the layout is fully art-directable today.
-// -----------------------------------------------------------------------------
+// ── HeroSection ──────────────────────────────────────────────────────────────
 function HeroSection({ backgroundImageUrl }) {
   return (
     <section className="relative overflow-hidden bg-navy-900">
-      {/* Image wrapper — swap the empty style object for
-          `style={{ backgroundImage: `url(${backgroundImageUrl})` }}` plus
-          `bg-cover bg-center` once real photography is ready. */}
       <div
         className="absolute inset-0 bg-navy-900"
         style={backgroundImageUrl ? { backgroundImage: `url(${backgroundImageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
@@ -74,8 +54,6 @@ function HeroSection({ backgroundImageUrl }) {
             <ImageIcon className="h-40 w-40 text-white" strokeWidth={1} />
           </div>
         )}
-        {/* Navy gradient wash — keeps hero text legible over any future
-            photograph, and is the whole effect on its own until one exists. */}
         <div className="absolute inset-0 bg-gradient-to-t from-navy-900 via-navy-900/85 to-navy-900/60" />
       </div>
 
@@ -111,16 +89,7 @@ function HeroSection({ backgroundImageUrl }) {
   );
 }
 
-// -----------------------------------------------------------------------------
-// ProgramDrawer — the slide-down "master-detail" panel for one university.
-// -----------------------------------------------------------------------------
-// ANIMATION NOTE: this uses the CSS grid-template-rows trick instead of a
-// JS-measured max-height. The wrapping <div> animates its `grid-template-
-// rows` between `0fr` (collapsed) and `1fr` (expanded); the actual content
-// sits in a `overflow-hidden` child. Because `fr` units respect the
-// content's natural height, this animates smoothly to exactly the right
-// height with no `getBoundingClientRect` measuring and no layout jump —
-// notably smoother than a fixed max-height guess.
+// ── ProgramDrawer ────────────────────────────────────────────────────────────
 function ProgramDrawer({ isOpen, cacheEntry, universityName }) {
   return (
     <div
@@ -143,9 +112,6 @@ function ProgramDrawer({ isOpen, cacheEntry, universityName }) {
                     <GraduationCap className="mt-0.5 h-4 w-4 shrink-0 text-navy-700" />
                     <div>
                       <h4 className="text-sm font-semibold text-navy-900">{program.name}</h4>
-                      {/* CONFIRMED: Program.DegreeLevel choices mapped via
-                          degreeLevelLabel() — was raw-printing the code
-                          (e.g. "BACHELOR") before. */}
                       <p className="text-xs uppercase tracking-wide text-slate-500">{degreeLevelLabel(program.degree_level)}</p>
                     </div>
                   </div>
@@ -155,8 +121,6 @@ function ProgramDrawer({ isOpen, cacheEntry, universityName }) {
                       <CalendarClock className="h-3.5 w-3.5 text-slate-400" />
                       Deadline: <span className="font-medium text-slate-800">{program.application_deadline || 'Not yet published'}</span>
                     </div>
-                    {/* CONFIRMED real Program fields — replaces a portal_url
-                        link that doesn't exist on this model. */}
                     <div className="flex items-center gap-1.5">
                       <GraduationCap className="h-3.5 w-3.5 text-slate-400" />
                       {program.duration_semesters} semester{program.duration_semesters === 1 ? '' : 's'}
@@ -178,12 +142,13 @@ function ProgramDrawer({ isOpen, cacheEntry, universityName }) {
   );
 }
 
-// -----------------------------------------------------------------------------
-// UniversityRow — one editorial-style list row (not a card): a horizontal
-// rule above and below, a small square image-placeholder block on the left,
-// and a subtle skew-on-hover cue that this row is interactive.
-// -----------------------------------------------------------------------------
+// ── UniversityRow ────────────────────────────────────────────────────────────
+// NEW: Displays university image if available, otherwise shows fallback.
 function UniversityRow({ university, isExpanded, onToggle, cacheEntry }) {
+  // Determine image source - use image_url from backend or fallback
+  const imageUrl = university.image_url || null;
+  const hasImage = Boolean(imageUrl);
+
   return (
     <div className="border-b border-slate-200">
       <button
@@ -191,20 +156,24 @@ function UniversityRow({ university, isExpanded, onToggle, cacheEntry }) {
         onClick={() => onToggle(university.id)}
         className="group flex w-full items-center gap-5 px-6 py-5 text-left transition-colors hover:bg-slate-50"
       >
-        {/* Image placeholder wrapper — same swap-in contract as the hero:
-            drop a real thumbnail URL onto a background-image style here
-            once photography exists per-university. */}
-        <div className="flex h-16 w-16 shrink-0 items-center justify-center bg-navy-900 transition-transform duration-200 ease-out group-hover:-skew-x-3">
-          <ImageIcon className="h-6 w-6 text-white/40" strokeWidth={1.5} />
+        {/* ── Image / Placeholder ───────────────────────────────────────────── */}
+        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden bg-navy-900 transition-transform duration-200 ease-out group-hover:-skew-x-3">
+          {hasImage ? (
+            <img
+              src={imageUrl}
+              alt={university.name}
+              className="h-full w-full object-cover"
+              loading="lazy"
+            />
+          ) : (
+            <Building2 className="h-6 w-6 text-white/40" strokeWidth={1.5} />
+          )}
         </div>
 
+        {/* ── University Info ────────────────────────────────────────────────── */}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-3">
             <h3 className="text-base font-bold uppercase tracking-wide text-navy-900">{university.name}</h3>
-            {/* CONFIRMED against universities/models.py: travel_advisory_level
-                is a string code (UNKNOWN/NORMAL/LEVEL_1..LEVEL_4), not a
-                number — advisoryBadgeMeta() is the shared, single source of
-                truth for mapping that code to a tone + label. */}
             {(() => {
               const { tone, label } = advisoryBadgeMeta(university.travel_advisory_level);
               return (
@@ -231,9 +200,7 @@ function UniversityRow({ university, isExpanded, onToggle, cacheEntry }) {
   );
 }
 
-// -----------------------------------------------------------------------------
-// TOP-LEVEL: ExploreCatalog
-// -----------------------------------------------------------------------------
+// ── TOP-LEVEL: ExploreCatalog ──────────────────────────────────────────────
 export default function ExploreCatalog() {
   const [universities, setUniversities] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -245,19 +212,10 @@ export default function ExploreCatalog() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Which single row is expanded. Master-detail is intentionally
-  // single-open: opening a new row auto-closes the previous one, so the
-  // page never grows into an unbounded, scroll-heavy wall of open drawers.
   const [expandedId, setExpandedId] = useState(null);
-
-  // Cache of already-fetched program lists, keyed by university id. This is
-  // what makes re-clicking a previously-opened row instant (collapse/open
-  // again with no loading flash) instead of re-hitting the network every
-  // single time.
   const [programsCache, setProgramsCache] = useState({});
 
-  // Debounce the search box exactly like the Admin queue in Phase 4 — wait
-  // for the visitor to stop typing before firing a network request.
+  // Debounce the search box
   useEffect(() => {
     const timeoutId = setTimeout(() => setSearchQuery(searchInput), 400);
     return () => clearTimeout(timeoutId);
@@ -294,17 +252,14 @@ export default function ExploreCatalog() {
     setPage(1);
   }
 
-  // Handles a row click: collapses if it's already open, otherwise expands
-  // it AND lazily kicks off the programs fetch — but only if this
-  // university's programs are not already sitting in the cache.
   async function handleToggleRow(universityId) {
     if (expandedId === universityId) {
-      setExpandedId(null); // clicking the already-open row just closes it
+      setExpandedId(null);
       return;
     }
-    setExpandedId(universityId); // single-open master-detail: this replaces whatever was open before
+    setExpandedId(universityId);
 
-    if (programsCache[universityId]) return; // already fetched once this session — no need to re-fetch
+    if (programsCache[universityId]) return;
 
     setProgramsCache((prev) => ({ ...prev, [universityId]: { status: 'loading' } }));
     try {
@@ -321,9 +276,7 @@ export default function ExploreCatalog() {
     <div className="min-h-screen bg-canvas">
       <HeroSection />
 
-      {/* ---------------------------------------------------------------
-          FILTER BAR
-      --------------------------------------------------------------- */}
+      {/* FILTER BAR */}
       <section className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl flex-wrap items-end justify-between gap-4 px-6 py-6">
           <div>
@@ -350,9 +303,7 @@ export default function ExploreCatalog() {
         </div>
       </section>
 
-      {/* ---------------------------------------------------------------
-          MASTER LIST
-      --------------------------------------------------------------- */}
+      {/* MASTER LIST */}
       <section className="mx-auto max-w-6xl px-6 py-2">
         <div className="border border-slate-200 bg-white">
           {isLoading ? (
@@ -380,9 +331,7 @@ export default function ExploreCatalog() {
         )}
       </section>
 
-      {/* ---------------------------------------------------------------
-          CLOSING CTA BANNER
-      --------------------------------------------------------------- */}
+      {/* CLOSING CTA BANNER */}
       <section className="mt-12 bg-navy-900 px-6 py-16">
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-6 text-center">
           <h2 className="max-w-xl text-2xl font-bold uppercase tracking-wide text-white">

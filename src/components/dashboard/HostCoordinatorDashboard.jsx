@@ -3,6 +3,11 @@
 // -----------------------------------------------------------------------------
 // PHASE 4b — GlobalScholar Host Coordinator (HOST_COORD) Dashboard
 // CONNECTED TO REAL BACKEND!
+//
+// Sections:
+//   1. Stats (Submitted, Under Review, Compliance Phase)
+//   2. Applications Table (with approve/reject + document inspection)
+//   3. Credit Transfers (list + add new)
 // =============================================================================
 
 import { useState, useEffect, useCallback, Fragment } from 'react';
@@ -25,6 +30,8 @@ import {
   FileText,
   ExternalLink,
   ShieldCheck,
+  Plus,
+  X,
 } from 'lucide-react';
 import { CustomDropdown, Badge, EmptyState, LoadingRow, documentTypeLabel } from './shared/DashboardUI';
 import {
@@ -38,6 +45,11 @@ import {
   getHostUnreadCount,
   getHostUniversity,
 } from '../../api/hostcoord';
+import {
+  getCreditTransfers,
+  createCreditTransfer,
+  updateCreditTransfer,
+} from '../../api/client';
 
 const STATUS_FILTER_OPTIONS = ['All Statuses', 'SUBMITTED', 'UNDER_REVIEW', 'COMPLIANCE_PHASE', 'APPROVED', 'REJECTED'];
 
@@ -235,6 +247,353 @@ function DocumentInspector({ applicationId, onActionComplete }) {
   );
 }
 
+// ── Credit Transfer Form ─────────────────────────────────────────────────
+function CreditTransferForm({ applicationId, onClose, onSuccess }) {
+  const [formData, setFormData] = useState({
+    host_course_code: '',
+    host_course_name: '',
+    host_credits: '',
+    host_grade: '',
+    home_equivalent_course_code: '',
+    home_equivalent_course_name: '',
+    home_credits_awarded: '',
+    transfer_status: 'PENDING',
+    denial_reason: '',
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const payload = {
+        host_course_code: formData.host_course_code.trim(),
+        host_course_name: formData.host_course_name.trim(),
+        host_credits: parseFloat(formData.host_credits),
+        host_grade: formData.host_grade.trim(),
+        home_equivalent_course_code: formData.home_equivalent_course_code.trim(),
+        home_equivalent_course_name: formData.home_equivalent_course_name.trim(),
+        home_credits_awarded: formData.home_credits_awarded ? parseFloat(formData.home_credits_awarded) : null,
+        transfer_status: formData.transfer_status,
+        denial_reason: formData.denial_reason.trim(),
+      };
+
+      await createCreditTransfer(applicationId, payload);
+      onSuccess();
+      onClose();
+    } catch (err) {
+      const responseData = err?.response?.data;
+      let errorMessage = 'Could not create credit transfer.';
+      if (typeof responseData === 'object') {
+        const firstKey = Object.keys(responseData)[0];
+        errorMessage = responseData[firstKey]?.[0] || errorMessage;
+      }
+      setError(errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // If denial_reason is required (DENIED or PARTIAL)
+  const requiresDenialReason = formData.transfer_status === 'DENIED' || formData.transfer_status === 'PARTIAL';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-2xl border border-slate-200 bg-white shadow-lg rounded-none">
+        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">Add Credit Transfer</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 transition-colors"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6">
+          {error && (
+            <div className="mb-4 flex items-center gap-2 border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 rounded-none">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              {error}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {/* Host Course Code */}
+            <div>
+              <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
+                Host Course Code <span className="text-red-600">*</span>
+              </label>
+              <input
+                type="text"
+                name="host_course_code"
+                value={formData.host_course_code}
+                onChange={handleChange}
+                required
+                placeholder="CS401"
+                className="w-full border border-slate-300 px-3 py-2 text-sm rounded-none focus:border-gold-500 focus:outline-none"
+              />
+            </div>
+
+            {/* Host Course Name */}
+            <div>
+              <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
+                Host Course Name <span className="text-red-600">*</span>
+              </label>
+              <input
+                type="text"
+                name="host_course_name"
+                value={formData.host_course_name}
+                onChange={handleChange}
+                required
+                placeholder="Advanced Programming"
+                className="w-full border border-slate-300 px-3 py-2 text-sm rounded-none focus:border-gold-500 focus:outline-none"
+              />
+            </div>
+
+            {/* Host Credits */}
+            <div>
+              <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
+                Host Credits <span className="text-red-600">*</span>
+              </label>
+              <input
+                type="number"
+                name="host_credits"
+                value={formData.host_credits}
+                onChange={handleChange}
+                required
+                step="0.01"
+                min="0"
+                placeholder="3.0"
+                className="w-full border border-slate-300 px-3 py-2 text-sm rounded-none focus:border-gold-500 focus:outline-none"
+              />
+            </div>
+
+            {/* Host Grade */}
+            <div>
+              <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
+                Host Grade
+              </label>
+              <input
+                type="text"
+                name="host_grade"
+                value={formData.host_grade}
+                onChange={handleChange}
+                placeholder="A"
+                className="w-full border border-slate-300 px-3 py-2 text-sm rounded-none focus:border-gold-500 focus:outline-none"
+              />
+            </div>
+
+            {/* Home Equivalent Course Code */}
+            <div>
+              <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
+                Home Equivalent Course Code
+              </label>
+              <input
+                type="text"
+                name="home_equivalent_course_code"
+                value={formData.home_equivalent_course_code}
+                onChange={handleChange}
+                placeholder="CS-400"
+                className="w-full border border-slate-300 px-3 py-2 text-sm rounded-none focus:border-gold-500 focus:outline-none"
+              />
+            </div>
+
+            {/* Home Equivalent Course Name */}
+            <div>
+              <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
+                Home Equivalent Course Name
+              </label>
+              <input
+                type="text"
+                name="home_equivalent_course_name"
+                value={formData.home_equivalent_course_name}
+                onChange={handleChange}
+                placeholder="Programming III"
+                className="w-full border border-slate-300 px-3 py-2 text-sm rounded-none focus:border-gold-500 focus:outline-none"
+              />
+            </div>
+
+            {/* Home Credits Awarded */}
+            <div>
+              <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
+                Home Credits Awarded
+              </label>
+              <input
+                type="number"
+                name="home_credits_awarded"
+                value={formData.home_credits_awarded}
+                onChange={handleChange}
+                step="0.01"
+                min="0"
+                placeholder="3.0"
+                className="w-full border border-slate-300 px-3 py-2 text-sm rounded-none focus:border-gold-500 focus:outline-none"
+              />
+            </div>
+
+            {/* Transfer Status */}
+            <div>
+              <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
+                Transfer Status <span className="text-red-600">*</span>
+              </label>
+              <select
+                name="transfer_status"
+                value={formData.transfer_status}
+                onChange={handleChange}
+                className="w-full border border-slate-300 bg-white px-3 py-2 text-sm rounded-none focus:border-gold-500 focus:outline-none"
+              >
+                <option value="PENDING">Pending</option>
+                <option value="APPROVED">Approved</option>
+                <option value="DENIED">Denied</option>
+                <option value="PARTIAL">Partial</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Denial Reason (conditional) */}
+          {requiresDenialReason && (
+            <div className="mt-4">
+              <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
+                Denial Reason <span className="text-red-600">*</span>
+              </label>
+              <textarea
+                name="denial_reason"
+                value={formData.denial_reason}
+                onChange={handleChange}
+                required
+                rows="3"
+                placeholder="Explain why this credit transfer is being denied or only partially approved…"
+                className="w-full resize-none border border-slate-300 px-3 py-2 text-sm rounded-none focus:border-gold-500 focus:outline-none"
+              />
+            </div>
+          )}
+
+          <div className="mt-6 flex justify-end gap-2 border-t border-slate-200 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="border border-slate-300 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 rounded-none hover:border-slate-400"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="flex items-center gap-1.5 border border-slate-800 bg-slate-800 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white rounded-none hover:bg-slate-900 disabled:opacity-50"
+            >
+              {isSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+              Save Credit Transfer
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Credit Transfers List ──────────────────────────────────────────────
+function CreditTransfersList({ applicationId }) {
+  const [transfers, setTransfers] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+
+  const fetchTransfers = useCallback(async () => {
+    if (!applicationId) return;
+    setIsLoading(true);
+    try {
+      const response = await getCreditTransfers(applicationId);
+      setTransfers(response.data.results || response.data || []);
+    } catch (err) {
+      setTransfers([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [applicationId]);
+
+  useEffect(() => {
+    fetchTransfers();
+  }, [fetchTransfers]);
+
+  if (!applicationId) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 py-8 text-sm text-slate-400">
+        <ClipboardList className="h-6 w-6" />
+        Select an application to manage credit transfers.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 border-t border-slate-200 pt-4">
+      <div className="flex items-center justify-between">
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Credit Transfers</h4>
+        <button
+          type="button"
+          onClick={() => setShowForm(true)}
+          className="flex items-center gap-1 border border-slate-300 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 rounded-none hover:border-slate-400"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add Transfer
+        </button>
+      </div>
+
+      {isLoading ? (
+        <LoadingRow label="Loading credit transfers…" />
+      ) : transfers.length === 0 ? (
+        <p className="py-4 text-xs text-slate-400">No credit transfers added yet.</p>
+      ) : (
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full border-collapse text-left text-xs">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50">
+                <th className="px-3 py-2 font-semibold text-slate-500">Course Code</th>
+                <th className="px-3 py-2 font-semibold text-slate-500">Course Name</th>
+                <th className="px-3 py-2 font-semibold text-slate-500">Credits</th>
+                <th className="px-3 py-2 font-semibold text-slate-500">Grade</th>
+                <th className="px-3 py-2 font-semibold text-slate-500">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {transfers.map((transfer) => (
+                <tr key={transfer.id} className="border-b border-slate-100 hover:bg-slate-50">
+                  <td className="px-3 py-2 font-medium text-slate-700">{transfer.host_course_code}</td>
+                  <td className="px-3 py-2 text-slate-600">{transfer.host_course_name}</td>
+                  <td className="px-3 py-2 text-slate-600">{transfer.host_credits}</td>
+                  <td className="px-3 py-2 text-slate-600">{transfer.host_grade || '—'}</td>
+                  <td className="px-3 py-2">
+                    <Badge tone={toneForStatus(transfer.transfer_status)}>
+                      {transfer.transfer_status.replace(/_/g, ' ')}
+                    </Badge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {showForm && (
+        <CreditTransferForm
+          applicationId={applicationId}
+          onClose={() => setShowForm(false)}
+          onSuccess={() => {
+            fetchTransfers();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 // ── TOP-LEVEL: HostCoordinatorDashboard ─────────────────────────────────
 export default function HostCoordinatorDashboard() {
   const [applications, setApplications] = useState([]);
@@ -298,7 +657,6 @@ export default function HostCoordinatorDashboard() {
     try {
       await approveHostApplication(selectedApplication.id);
       await fetchApplications();
-      // Refresh the detail
       const response = await getHostApplicationDetail(selectedApplication.id);
       setSelectedApplication(response.data);
     } catch (err) {
@@ -480,11 +838,13 @@ export default function HostCoordinatorDashboard() {
                               <DocumentInspector
                                 applicationId={selectedApplication.id}
                                 onActionComplete={() => {
-                                  // Refresh after document action
                                   getHostApplicationDetail(selectedApplication.id).then((res) => setSelectedApplication(res.data));
                                   fetchApplications();
                                 }}
                               />
+
+                              {/* Credit Transfers */}
+                              <CreditTransfersList applicationId={selectedApplication.id} />
                             </div>
                           ) : (
                             <p className="text-sm text-slate-400">Could not load details.</p>

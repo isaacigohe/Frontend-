@@ -1,3 +1,10 @@
+// =============================================================================
+// StudentDashboard.jsx
+// -----------------------------------------------------------------------------
+// PHASE 3 — GlobalScholar Student Workspace
+// Supports multiple applications to multiple universities and programs.
+// =============================================================================
+
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import {
   FileEdit,
@@ -55,18 +62,12 @@ const LANGUAGE_OPTIONS = ['All Languages', ...LANGUAGE_CHOICES];
 
 function toneForStatus(status) {
   switch (status) {
-    case 'APPROVED':
-      return 'emerald';
-    case 'REJECTED':
-      return 'red';
-    case 'UNDER_REVIEW':
-      return 'amber';
-    case 'COMPLIANCE_PHASE':
-      return 'orange';
-    case 'SUBMITTED':
-      return 'navy';
-    default:
-      return 'slate';
+    case 'APPROVED': return 'emerald';
+    case 'REJECTED': return 'red';
+    case 'UNDER_REVIEW': return 'amber';
+    case 'COMPLIANCE_PHASE': return 'orange';
+    case 'SUBMITTED': return 'navy';
+    default: return 'slate';
   }
 }
 
@@ -108,88 +109,75 @@ function StatusBanner({ status, hasPendingDocuments, applicationCount }) {
 // ── PROGRESS BOARD ──────────────────────────────────────────────────────────
 function ProgressBoard({ currentStageKey, applicationCount }) {
   const currentIndex = PIPELINE_STAGES.findIndex((stage) => stage.key === currentStageKey);
-  const stageLabels = {
-    DRAFT: 'Complete and submit',
-    SUBMITTED: 'Awaiting review',
-    UNDER_REVIEW: 'Admin reviewing',
-    COMPLIANCE_PHASE: 'Upload documents',
-    APPROVED: 'Complete',
-  };
+
+  if (applicationCount === 0) {
+    return (
+      <section className="border border-slate-200 bg-white shadow-sm rounded-none p-6">
+        <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-slate-700">Application Pipeline</h2>
+        <p className="text-sm text-slate-500">You don't have any applications yet. Browse the catalog below to apply.</p>
+      </section>
+    );
+  }
 
   return (
     <section className="border border-slate-200 bg-white shadow-sm rounded-none p-6">
       <div className="flex flex-wrap items-center justify-between mb-4">
         <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">Application Pipeline</h2>
-        <span className="text-xs text-slate-500">
-          {applicationCount > 0 ? `Stage ${currentIndex + 1} of ${PIPELINE_STAGES.length}` : 'No active application'}
-        </span>
+        <span className="text-xs text-slate-500">Stage {currentIndex + 1} of {PIPELINE_STAGES.length}</span>
       </div>
+      <div className="flex items-center">
+        {PIPELINE_STAGES.map((stage, index) => {
+          const StageIcon = stage.icon;
+          const isComplete = index < currentIndex;
+          const isActive = index === currentIndex;
+          const isLast = index === PIPELINE_STAGES.length - 1;
 
-      {applicationCount === 0 ? (
-        <p className="text-sm text-slate-500">You don't have any applications yet. Browse the catalog below to apply.</p>
-      ) : (
-        <div className="flex items-center">
-          {PIPELINE_STAGES.map((stage, index) => {
-            const StageIcon = stage.icon;
-            const isComplete = index < currentIndex;
-            const isActive = index === currentIndex;
-            const isLast = index === PIPELINE_STAGES.length - 1;
-
-            return (
-              <div key={stage.key} className={`flex items-center ${isLast ? '' : 'flex-1'}`}>
-                <div className="flex flex-col items-center gap-1.5">
-                  <div
-                    className={`flex h-10 w-10 items-center justify-center border-2 rounded-none ${
-                      isComplete
-                        ? 'border-slate-800 bg-slate-800 text-white'
-                        : isActive
-                        ? 'border-gold-500 bg-gold-500 text-navy-900'
-                        : 'border-slate-300 bg-white text-slate-300'
-                    }`}
-                  >
-                    {isComplete ? <CircleCheck className="h-5 w-5" /> : <StageIcon className="h-5 w-5" />}
-                  </div>
-                  <span
-                    className={`text-center text-[11px] font-semibold uppercase tracking-wide ${
-                      isActive ? 'text-gold-700' : isComplete ? 'text-slate-600' : 'text-slate-400'
-                    }`}
-                  >
-                    {stage.label}
-                  </span>
-                  <span className="text-center text-[9px] text-slate-400">
-                    {isActive ? '◀ You are here' : isComplete ? '✓ Done' : ''}
-                  </span>
+          return (
+            <div key={stage.key} className={`flex items-center ${isLast ? '' : 'flex-1'}`}>
+              <div className="flex flex-col items-center gap-1.5">
+                <div
+                  className={`flex h-10 w-10 items-center justify-center border-2 rounded-none ${
+                    isComplete
+                      ? 'border-slate-800 bg-slate-800 text-white'
+                      : isActive
+                      ? 'border-gold-500 bg-gold-500 text-navy-900'
+                      : 'border-slate-300 bg-white text-slate-300'
+                  }`}
+                >
+                  {isComplete ? <CircleCheck className="h-5 w-5" /> : <StageIcon className="h-5 w-5" />}
                 </div>
-                {!isLast && <div className={`mx-2 h-0.5 flex-1 ${isComplete ? 'bg-slate-800' : 'bg-slate-300'}`} />}
+                <span className={`text-center text-[11px] font-semibold uppercase tracking-wide ${
+                  isActive ? 'text-gold-700' : isComplete ? 'text-slate-600' : 'text-slate-400'
+                }`}>
+                  {stage.label}
+                </span>
+                <span className="text-center text-[9px] text-slate-400">
+                  {isActive ? '◀ You are here' : isComplete ? '✓ Done' : ''}
+                </span>
               </div>
-            );
-          })}
-        </div>
-      )}
-
-      {applicationCount > 0 && (
-        <div className="mt-4 border-t border-slate-200 pt-3">
-          <p className="text-xs text-slate-500">
-            {currentIndex < PIPELINE_STAGES.length - 1 ? (
-              <>
-                <span className="font-semibold">Next step:</span>{' '}
-                {stageLabels[currentStageKey] || 'Proceed to next stage'}
-              </>
-            ) : (
-              <span className="font-semibold text-emerald-600">Application process complete!</span>
-            )}
-          </p>
-        </div>
-      )}
+              {!isLast && <div className={`mx-2 h-0.5 flex-1 ${isComplete ? 'bg-slate-800' : 'bg-slate-300'}`} />}
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-4 border-t border-slate-200 pt-3">
+        <p className="text-xs text-slate-500">
+          {currentIndex < PIPELINE_STAGES.length - 1 ? (
+            <>
+              <span className="font-semibold">Next step:</span> Proceed to next stage
+            </>
+          ) : (
+            <span className="font-semibold text-emerald-600">Application process complete!</span>
+          )}
+        </p>
+      </div>
     </section>
   );
 }
 
 // ── MY APPLICATIONS SECTION ──────────────────────────────────────────────────
 function MyApplications({ applications, onRefresh }) {
-  if (applications.length === 0) {
-    return null;
-  }
+  if (applications.length === 0) return null;
 
   return (
     <section className="border border-slate-200 bg-white shadow-sm rounded-none">
@@ -205,11 +193,8 @@ function MyApplications({ applications, onRefresh }) {
                 <p className="text-sm font-semibold text-slate-800">
                   {app.destination_university?.name || app.university_name || 'University'}
                 </p>
-                {app.program_detail && (
+                {app.program_detail?.name && (
                   <p className="text-xs text-slate-500">{app.program_detail.name}</p>
-                )}
-                {app.program && !app.program_detail && (
-                  <p className="text-xs text-slate-500">Program ID: {app.program}</p>
                 )}
               </div>
               <div className="flex items-center gap-3">
@@ -219,12 +204,6 @@ function MyApplications({ applications, onRefresh }) {
                 <span className="text-xs text-slate-400">
                   {app.submitted_at ? new Date(app.submitted_at).toLocaleDateString() : 'Draft'}
                 </span>
-                <Link
-                  to={`/applications/${app.id}`}
-                  className="text-xs font-semibold uppercase tracking-wide text-navy-600 hover:text-gold-600 transition-colors"
-                >
-                  View Details
-                </Link>
               </div>
             </div>
           </div>
@@ -298,10 +277,7 @@ function AdvisoryBadge({ level }) {
   }[tone];
 
   return (
-    <span
-      title={label}
-      className={`inline-flex items-center gap-1 border ${toneClasses} px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide rounded-none`}
-    >
+    <span className={`inline-flex items-center gap-1 border ${toneClasses} px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide rounded-none`}>
       <MapPin className="h-3 w-3" />
       {label}
     </span>
@@ -344,19 +320,16 @@ function DocumentSummary({ checklist }) {
   const pending = total - uploaded;
   const percentage = total > 0 ? Math.round((uploaded / total) * 100) : 0;
 
+  if (total === 0) return null;
+
   return (
     <div className="border border-slate-200 bg-slate-50 p-3 mb-4">
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
         <span className="font-semibold uppercase tracking-wide text-slate-600">Document Progress</span>
-        <span className="text-slate-600">
-          {uploaded} of {total} uploaded ({percentage}%)
-        </span>
+        <span className="text-slate-600">{uploaded} of {total} uploaded ({percentage}%)</span>
       </div>
       <div className="mt-1 h-2 w-full bg-slate-200 rounded-none overflow-hidden">
-        <div
-          className="h-full bg-gold-500 transition-all duration-300"
-          style={{ width: `${percentage}%` }}
-        />
+        <div className="h-full bg-gold-500 transition-all duration-300" style={{ width: `${percentage}%` }} />
       </div>
       <div className="mt-1 flex flex-wrap gap-4 text-xs text-slate-500">
         <span>Total: {total}</span>
@@ -365,6 +338,261 @@ function DocumentSummary({ checklist }) {
         <span className="text-emerald-700">Approved: {approved}</span>
       </div>
     </div>
+  );
+}
+
+// ── COMPLIANCE CHECKLIST VAULT ─────────────────────────────────────────────
+function ComplianceVault({ onChecklistChange }) {
+  const [checklist, setChecklist] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
+  const [uploadingId, setUploadingId] = useState(null);
+  const [uploadError, setUploadError] = useState(null);
+  const [isBulkUploading, setIsBulkUploading] = useState(false);
+  const [bulkUploadError, setBulkUploadError] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const fetchChecklist = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await getDocumentChecklist();
+      const data = response.data || [];
+      setChecklist(data);
+      if (onChecklistChange) onChecklistChange(data);
+    } catch (err) {
+      console.error('Failed to fetch checklist:', err);
+      setError('Could not load checklist. Please refresh.');
+      setChecklist([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [onChecklistChange]);
+
+  useEffect(() => {
+    fetchChecklist();
+  }, [fetchChecklist]);
+
+  function toggleRow(documentId) {
+    setExpandedId((prev) => (prev === documentId ? null : documentId));
+    setUploadError(null);
+  }
+
+  async function handleFileSelected(documentId, event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    setUploadingId(documentId);
+    setUploadError(null);
+    try {
+      await uploadDocument(documentId, file);
+      await fetchChecklist();
+      setExpandedId(null);
+    } catch (err) {
+      setUploadError('Upload failed. Please try again.');
+    } finally {
+      setUploadingId(null);
+      event.target.value = '';
+    }
+  }
+
+  async function handleBulkUpload(event) {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsBulkUploading(true);
+    setBulkUploadError(null);
+
+    try {
+      const fileMap = {};
+      Array.from(files).forEach((file) => {
+        const name = file.name.toLowerCase();
+        if (name.includes('passport')) fileMap.passport = file;
+        else if (name.includes('transcript')) fileMap.transcript = file;
+        else if (name.includes('language') || name.includes('ielts') || name.includes('toefl')) fileMap.language_test = file;
+        else if (name.includes('statement')) fileMap.personal_statement = file;
+        else if (name.includes('reference') || name.includes('letter')) fileMap.reference_letter = file;
+        else if (name.includes('bank')) fileMap.bank_statement = file;
+        else if (name.includes('visa')) fileMap.visa = file;
+        else if (name.includes('medical')) fileMap.medical = file;
+        else if (name.includes('insurance')) fileMap.insurance = file;
+        else if (name.includes('housing') || name.includes('confirmation')) fileMap.housing = file;
+      });
+
+      if (checklist.length > 0) {
+        const applicationId = checklist[0].application;
+        await bulkUploadDocuments(applicationId, fileMap);
+        await fetchChecklist();
+      } else {
+        setBulkUploadError('No active application found.');
+      }
+    } catch (err) {
+      setBulkUploadError('Bulk upload failed. Please try individual uploads.');
+    } finally {
+      setIsBulkUploading(false);
+      event.target.value = '';
+    }
+  }
+
+  const total = checklist.length;
+  const hasDocuments = total > 0;
+  const isInCompliancePhase = checklist.some((item) =>
+    item.verification_status === 'PENDING' ||
+    item.verification_status === 'AWAITING_REVIEW' ||
+    item.verification_status === 'ACTION_REQUIRED'
+  );
+
+  // If there's an error, show it
+  if (error) {
+    return (
+      <section className="border border-slate-200 bg-white shadow-sm rounded-none">
+        <div className="border-b border-slate-200 p-6">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">Compliance Checklist Vault</h2>
+        </div>
+        <div className="p-6 text-center text-sm text-red-600">
+          <AlertTriangle className="h-5 w-5 mx-auto mb-2 text-red-500" />
+          {error}
+          <button
+            type="button"
+            onClick={fetchChecklist}
+            className="block mx-auto mt-2 text-navy-600 underline hover:text-navy-800"
+          >
+            Retry
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="border border-slate-200 bg-white shadow-sm rounded-none">
+      <div className="flex flex-wrap items-center justify-between border-b border-slate-200 p-6">
+        <div>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">Compliance Checklist Vault</h2>
+          <p className="mt-1 text-xs text-slate-500">Required documentation for your active application</p>
+        </div>
+        {hasDocuments && isInCompliancePhase && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isBulkUploading}
+              className="flex items-center gap-1.5 border border-slate-800 bg-slate-800 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white rounded-none hover:bg-slate-900 disabled:opacity-50"
+            >
+              {isBulkUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+              Upload All Documents
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              disabled={isBulkUploading}
+              onChange={handleBulkUpload}
+              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+            />
+          </div>
+        )}
+      </div>
+
+      {hasDocuments && isInCompliancePhase && (
+        <div className="px-6 pt-4">
+          <DocumentSummary checklist={checklist} />
+        </div>
+      )}
+
+      {bulkUploadError && (
+        <div className="mx-6 mt-3 flex items-center gap-2 border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 rounded-none">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> {bulkUploadError}
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="flex items-center justify-center gap-2 p-10 text-sm text-slate-500">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading checklist…
+        </div>
+      ) : (
+        <table className="w-full border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-6 py-2">Document</th>
+              <th className="px-6 py-2">Status</th>
+              <th className="px-6 py-2">Last Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {checklist.map((item) => {
+              const isActionable = item.verification_status === 'PENDING' || item.verification_status === 'ACTION_REQUIRED';
+
+              return (
+                <Fragment key={item.id}>
+                  <tr
+                    onClick={() => isActionable && toggleRow(item.id)}
+                    className={`border-b border-slate-100 ${isActionable ? 'cursor-pointer hover:bg-slate-50' : ''}`}
+                  >
+                    <td className="flex items-center gap-2 px-6 py-3 font-medium text-slate-800">
+                      <Paperclip className="h-3.5 w-3.5 text-slate-400" />
+                      {documentTypeLabel(item.document_type)}
+                    </td>
+                    <td className="px-6 py-3">
+                      <ChecklistStatusBadge status={item.verification_status} />
+                    </td>
+                    <td className="px-6 py-3 text-slate-500">{item.updated_at}</td>
+                  </tr>
+
+                  {expandedId === item.id && isActionable && (
+                    <tr className={`border-b border-slate-100 ${item.verification_status === 'ACTION_REQUIRED' ? 'bg-red-50' : 'bg-slate-50'}`}>
+                      <td colSpan={3} className="px-6 py-4">
+                        <div className={`flex items-start gap-3 border bg-white p-4 rounded-none ${item.verification_status === 'ACTION_REQUIRED' ? 'border-red-300' : 'border-slate-300'}`}>
+                          {item.verification_status === 'ACTION_REQUIRED' ? (
+                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+                          ) : (
+                            <UploadCloud className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                          )}
+                          <div className="flex-1">
+                            {item.verification_status === 'ACTION_REQUIRED' ? (
+                              <>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-red-700">Reviewer Comment</p>
+                                <p className="mt-1 text-sm text-slate-700">{item.admin_comment}</p>
+                              </>
+                            ) : (
+                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Upload this document to begin review.</p>
+                            )}
+                            <div className="mt-3 flex items-center gap-3">
+                              <label className="flex cursor-pointer items-center gap-2 border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-700 rounded-none hover:border-slate-500">
+                                <UploadCloud className="h-3.5 w-3.5" />
+                                {uploadingId === item.id ? 'Uploading…' : item.verification_status === 'ACTION_REQUIRED' ? 'Choose Replacement File' : 'Choose File'}
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  disabled={uploadingId === item.id}
+                                  onChange={(event) => handleFileSelected(item.id, event)}
+                                />
+                              </label>
+                              {uploadingId === item.id && <Loader2 className="h-4 w-4 animate-spin text-slate-500" />}
+                            </div>
+                            {uploadError && <p className="mt-2 text-xs font-semibold text-red-600">{uploadError}</p>}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+            {checklist.length === 0 && (
+              <tr>
+                <td colSpan={3} className="px-6 py-10 text-center text-sm text-slate-400">
+                  No checklist items assigned yet. Your application will generate documents once it reaches the Compliance Phase.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      )}
+    </section>
   );
 }
 
@@ -399,10 +627,12 @@ function UniversityCatalog({ existingApplications, onApplied }) {
       if (language !== 'All Languages') params.language = language;
       if (searchQuery) params.search = searchQuery;
       const response = await getUniversities(params);
-      setUniversities(response.data.results);
-      setTotalCount(response.data.count);
+      setUniversities(response.data.results || []);
+      setTotalCount(response.data.count || 0);
     } catch (err) {
-      setError('Could not load the university catalog. Please retry.');
+      console.error('Failed to fetch universities:', err);
+      setError('Could not load the university catalog. Please refresh.');
+      setUniversities([]);
     } finally {
       setIsLoading(false);
     }
@@ -412,17 +642,10 @@ function UniversityCatalog({ existingApplications, onApplied }) {
     fetchUniversities();
   }, [fetchUniversities]);
 
-  // Check if student already applied to a program
   const hasAppliedToProgram = (programId) => {
     return existingApplications.some((app) => app.program === programId);
   };
 
-  // Check if student already applied to a university
-  const hasAppliedToUniversity = (universityId) => {
-    return existingApplications.some((app) => app.destination_university === universityId);
-  };
-
-  // Get application for a program
   const getApplicationForProgram = (programId) => {
     return existingApplications.find((app) => app.program === programId);
   };
@@ -440,8 +663,9 @@ function UniversityCatalog({ existingApplications, onApplied }) {
     setProgramsCache((prev) => ({ ...prev, [universityId]: { status: 'loading' } }));
     try {
       const programs = await getUniversityProgramsList(universityId);
-      setProgramsCache((prev) => ({ ...prev, [universityId]: { status: 'ready', programs: programs } }));
+      setProgramsCache((prev) => ({ ...prev, [universityId]: { status: 'ready', programs: programs || [] } }));
     } catch (err) {
+      console.error('Failed to fetch programs:', err);
       setProgramsCache((prev) => ({ ...prev, [universityId]: { status: 'error' } }));
     }
   }
@@ -452,9 +676,9 @@ function UniversityCatalog({ existingApplications, onApplied }) {
     try {
       await applyToProgram(universityId, programId);
       if (onApplied) await onApplied();
-      // Refresh programs to update applied status
+      // Refresh programs
       const programs = await getUniversityProgramsList(universityId);
-      setProgramsCache((prev) => ({ ...prev, [universityId]: { status: 'ready', programs: programs } }));
+      setProgramsCache((prev) => ({ ...prev, [universityId]: { status: 'ready', programs: programs || [] } }));
     } catch (err) {
       const responseData = err?.response?.data;
       let message = 'Could not apply to this program.';
@@ -478,6 +702,24 @@ function UniversityCatalog({ existingApplications, onApplied }) {
   }
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
+  if (error) {
+    return (
+      <section className="border border-slate-200 bg-white shadow-sm rounded-none">
+        <div className="p-6 text-center text-sm text-red-600">
+          <AlertTriangle className="h-5 w-5 mx-auto mb-2 text-red-500" />
+          {error}
+          <button
+            type="button"
+            onClick={fetchUniversities}
+            className="block mx-auto mt-2 text-navy-600 underline hover:text-navy-800"
+          >
+            Retry
+          </button>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="border border-slate-200 bg-white shadow-sm rounded-none">
@@ -510,31 +752,24 @@ function UniversityCatalog({ existingApplications, onApplied }) {
           <Loader2 className="h-4 w-4 animate-spin" />
           Loading catalog…
         </div>
-      ) : error ? (
-        <div className="flex items-center gap-2 p-6 text-sm text-red-700">
-          <AlertTriangle className="h-4 w-4" />
-          {error}
-        </div>
       ) : (
         <div>
           {universities.map((uni) => {
             const isExpanded = expandedUniversity === uni.id;
-            const uniHasApplied = hasAppliedToUniversity(uni.id);
             const cache = programsCache[uni.id];
+            const hasApplied = existingApplications.some((app) => app.destination_university === uni.id);
 
             return (
               <div key={uni.id} className="border-b border-slate-100">
-                {/* University Row */}
+                {/* University Row - Click to expand */}
                 <div
                   onClick={() => handleToggleUniversity(uni.id)}
-                  className={`flex cursor-pointer items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-colors ${
-                    isExpanded ? 'bg-slate-50' : ''
-                  }`}
+                  className={`flex cursor-pointer items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-colors ${isExpanded ? 'bg-slate-50' : ''}`}
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-3">
                       <span className="text-sm font-semibold text-slate-800">{uni.name}</span>
-                      {uniHasApplied && (
+                      {hasApplied && (
                         <span className="border border-emerald-500 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
                           Applied
                         </span>
@@ -558,9 +793,7 @@ function UniversityCatalog({ existingApplications, onApplied }) {
                       </div>
                     ) : cache.status === 'error' ? (
                       <p className="text-sm text-red-600">Could not load programs.</p>
-                    ) : cache.programs.length === 0 ? (
-                      <p className="text-sm text-slate-400">No programs available for this university.</p>
-                    ) : (
+                    ) : cache.programs && cache.programs.length > 0 ? (
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         {cache.programs.map((program) => {
                           const alreadyApplied = hasAppliedToProgram(program.id);
@@ -606,11 +839,7 @@ function UniversityCatalog({ existingApplications, onApplied }) {
                                       disabled={isApplying}
                                       className="border border-slate-800 bg-slate-800 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white rounded-none hover:bg-slate-900 disabled:opacity-50"
                                     >
-                                      {isApplying ? (
-                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                      ) : (
-                                        'Apply'
-                                      )}
+                                      {isApplying ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Apply'}
                                     </button>
                                   )}
                                 </div>
@@ -619,6 +848,8 @@ function UniversityCatalog({ existingApplications, onApplied }) {
                           );
                         })}
                       </div>
+                    ) : (
+                      <p className="text-sm text-slate-400">No programs available for this university.</p>
                     )}
                     {applyError && (
                       <div className="mt-3 flex items-center gap-2 border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 rounded-none">
@@ -648,8 +879,7 @@ function UniversityCatalog({ existingApplications, onApplied }) {
             onClick={() => setPage((prev) => prev - 1)}
             className="flex items-center gap-1 border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-700 rounded-none hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <ChevronLeft className="h-3.5 w-3.5" />
-            Prev
+            <ChevronLeft className="h-3.5 w-3.5" /> Prev
           </button>
           <button
             type="button"
@@ -657,258 +887,10 @@ function UniversityCatalog({ existingApplications, onApplied }) {
             onClick={() => setPage((prev) => prev + 1)}
             className="flex items-center gap-1 border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-700 rounded-none hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Next
-            <ChevronRight className="h-3.5 w-3.5" />
+            Next <ChevronRight className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
-    </section>
-  );
-}
-
-// ── COMPLIANCE CHECKLIST VAULT ─────────────────────────────────────────────
-function ComplianceVault({ onChecklistChange }) {
-  const [checklist, setChecklist] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [expandedId, setExpandedId] = useState(null);
-  const [uploadingId, setUploadingId] = useState(null);
-  const [uploadError, setUploadError] = useState(null);
-  const [isBulkUploading, setIsBulkUploading] = useState(false);
-  const [bulkUploadError, setBulkUploadError] = useState(null);
-  const fileInputRef = useRef(null);
-
-  const fetchChecklist = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const response = await getDocumentChecklist();
-      setChecklist(response.data);
-      if (onChecklistChange) onChecklistChange(response.data);
-    } catch (err) {
-      setChecklist([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [onChecklistChange]);
-
-  useEffect(() => {
-    fetchChecklist();
-  }, [fetchChecklist]);
-
-  function toggleRow(documentId) {
-    setExpandedId((prev) => (prev === documentId ? null : documentId));
-    setUploadError(null);
-  }
-
-  async function handleFileSelected(documentId, event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    setUploadingId(documentId);
-    setUploadError(null);
-    try {
-      await uploadDocument(documentId, file);
-      await fetchChecklist();
-      setExpandedId(null);
-    } catch (err) {
-      setUploadError('Upload failed. Confirm the file is a PDF or image under 10MB and try again.');
-    } finally {
-      setUploadingId(null);
-      event.target.value = '';
-    }
-  }
-
-  async function handleBulkUpload(event) {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
-
-    setIsBulkUploading(true);
-    setBulkUploadError(null);
-
-    try {
-      const fileMap = {};
-      Array.from(files).forEach((file) => {
-        const name = file.name.toLowerCase();
-        if (name.includes('passport')) fileMap.passport = file;
-        else if (name.includes('transcript')) fileMap.transcript = file;
-        else if (name.includes('language') || name.includes('ielts') || name.includes('toefl')) fileMap.language_test = file;
-        else if (name.includes('statement')) fileMap.personal_statement = file;
-        else if (name.includes('reference') || name.includes('letter')) fileMap.reference_letter = file;
-        else if (name.includes('bank')) fileMap.bank_statement = file;
-        else if (name.includes('visa')) fileMap.visa = file;
-        else if (name.includes('medical')) fileMap.medical = file;
-        else if (name.includes('insurance')) fileMap.insurance = file;
-        else if (name.includes('housing') || name.includes('confirmation')) fileMap.housing = file;
-      });
-
-      if (checklist.length > 0) {
-        const applicationId = checklist[0].application;
-        await bulkUploadDocuments(applicationId, fileMap);
-        await fetchChecklist();
-      } else {
-        setBulkUploadError('No active application found. Please submit an application first.');
-      }
-    } catch (err) {
-      setBulkUploadError('Bulk upload failed. Please try uploading individual documents.');
-    } finally {
-      setIsBulkUploading(false);
-      event.target.value = '';
-    }
-  }
-
-  const total = checklist.length;
-  const uploaded = checklist.filter((doc) => doc.file_attachment !== null && doc.file_attachment !== '').length;
-  const hasDocuments = total > 0;
-  const isInCompliancePhase = checklist.some((item) =>
-    item.verification_status === 'PENDING' ||
-    item.verification_status === 'AWAITING_REVIEW' ||
-    item.verification_status === 'ACTION_REQUIRED'
-  );
-
-  return (
-    <section className="border border-slate-200 bg-white shadow-sm rounded-none">
-      <div className="flex flex-wrap items-center justify-between border-b border-slate-200 p-6">
-        <div>
-          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">Compliance Checklist Vault</h2>
-          <p className="mt-1 text-xs text-slate-500">Required documentation for your active application</p>
-        </div>
-        {hasDocuments && isInCompliancePhase && (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isBulkUploading}
-              className="flex items-center gap-1.5 border border-slate-800 bg-slate-800 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white rounded-none hover:bg-slate-900 disabled:opacity-50"
-            >
-              {isBulkUploading ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Upload className="h-3.5 w-3.5" />
-              )}
-              Upload All Documents
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              className="hidden"
-              disabled={isBulkUploading}
-              onChange={handleBulkUpload}
-              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-            />
-          </div>
-        )}
-      </div>
-
-      {hasDocuments && isInCompliancePhase && (
-        <div className="px-6 pt-4">
-          <DocumentSummary checklist={checklist} />
-        </div>
-      )}
-
-      {bulkUploadError && (
-        <div className="mx-6 mt-3 flex items-center gap-2 border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 rounded-none">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-          {bulkUploadError}
-        </div>
-      )}
-
-      {isLoading ? (
-        <div className="flex items-center justify-center gap-2 p-10 text-sm text-slate-500">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading checklist…
-        </div>
-      ) : (
-        <table className="w-full border-collapse text-left text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              <th className="px-6 py-2">Document</th>
-              <th className="px-6 py-2">Status</th>
-              <th className="px-6 py-2">Last Updated</th>
-            </tr>
-          </thead>
-          <tbody>
-            {checklist.map((item) => {
-              const isActionable = item.verification_status === 'PENDING' || item.verification_status === 'ACTION_REQUIRED';
-
-              return (
-                <Fragment key={item.id}>
-                  <tr
-                    onClick={() => isActionable && toggleRow(item.id)}
-                    className={`border-b border-slate-100 ${
-                      isActionable ? 'cursor-pointer hover:bg-slate-50' : ''
-                    }`}
-                  >
-                    <td className="flex items-center gap-2 px-6 py-3 font-medium text-slate-800">
-                      <Paperclip className="h-3.5 w-3.5 text-slate-400" />
-                      {documentTypeLabel(item.document_type)}
-                    </td>
-                    <td className="px-6 py-3">
-                      <ChecklistStatusBadge status={item.verification_status} />
-                    </td>
-                    <td className="px-6 py-3 text-slate-500">{item.updated_at}</td>
-                  </tr>
-
-                  {expandedId === item.id && isActionable && (
-                    <tr className={`border-b border-slate-100 ${item.verification_status === 'ACTION_REQUIRED' ? 'bg-red-50' : 'bg-slate-50'}`}>
-                      <td colSpan={3} className="px-6 py-4">
-                        <div
-                          className={`flex items-start gap-3 border bg-white p-4 rounded-none ${
-                            item.verification_status === 'ACTION_REQUIRED' ? 'border-red-300' : 'border-slate-300'
-                          }`}
-                        >
-                          {item.verification_status === 'ACTION_REQUIRED' ? (
-                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
-                          ) : (
-                            <UploadCloud className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-                          )}
-                          <div className="flex-1">
-                            {item.verification_status === 'ACTION_REQUIRED' ? (
-                              <>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-red-700">Reviewer Comment</p>
-                                <p className="mt-1 text-sm text-slate-700">{item.admin_comment}</p>
-                              </>
-                            ) : (
-                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                                Upload this document to begin review.
-                              </p>
-                            )}
-
-                            <div className="mt-3 flex items-center gap-3">
-                              <label className="flex cursor-pointer items-center gap-2 border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-700 rounded-none hover:border-slate-500">
-                                <UploadCloud className="h-3.5 w-3.5" />
-                                {uploadingId === item.id
-                                  ? 'Uploading…'
-                                  : item.verification_status === 'ACTION_REQUIRED'
-                                  ? 'Choose Replacement File'
-                                  : 'Choose File'}
-                                <input
-                                  type="file"
-                                  className="hidden"
-                                  disabled={uploadingId === item.id}
-                                  onChange={(event) => handleFileSelected(item.id, event)}
-                                />
-                              </label>
-                              {uploadingId === item.id && <Loader2 className="h-4 w-4 animate-spin text-slate-500" />}
-                            </div>
-                            {uploadError && <p className="mt-2 text-xs font-semibold text-red-600">{uploadError}</p>}
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              );
-            })}
-            {checklist.length === 0 && (
-              <tr>
-                <td colSpan={3} className="px-6 py-10 text-center text-sm text-slate-400">
-                  No checklist items assigned yet. Your application will generate documents once it reaches the Compliance Phase.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      )}
     </section>
   );
 }
@@ -923,6 +905,7 @@ export default function StudentDashboard() {
   const [isTogglingHighSchool, setIsTogglingHighSchool] = useState(false);
   const [checklist, setChecklist] = useState([]);
   const [hasActionRequiredItems, setHasActionRequiredItems] = useState(false);
+  const [isChecklistLoading, setIsChecklistLoading] = useState(true);
 
   const loadInitialData = useCallback(async () => {
     setIsProfileLoading(true);
@@ -935,14 +918,14 @@ export default function StudentDashboard() {
       setProfile(profileResult.value.data);
       setIsHighSchoolTrack(Boolean(profileResult.value.data.is_high_school_track));
     } else {
-      console.error('GlobalScholar: failed to load student profile:', profileResult.reason);
+      console.error('Failed to load student profile:', profileResult.reason);
     }
 
     if (progressResult.status === 'fulfilled') {
       setCurrentStage(progressResult.value.data.status || 'DRAFT');
       setAllApplications(progressResult.value.data.applications || []);
     } else {
-      console.error('GlobalScholar: failed to load applications:', progressResult.reason);
+      console.error('Failed to load applications:', progressResult.reason);
     }
 
     setIsProfileLoading(false);
@@ -973,7 +956,7 @@ export default function StudentDashboard() {
   const isVaultLocked = Boolean(unlisted && unlisted.requested && !unlisted.verified);
 
   return (
-    <div className="bg-slate-100 p-6">
+    <div className="bg-slate-100 p-6 pb-6">
       <div className="mx-auto max-w-6xl space-y-6">
         {/* Header Strip */}
         <header className="flex flex-wrap items-center justify-between gap-4 border border-slate-200 bg-white shadow-sm rounded-none p-6">
@@ -993,55 +976,33 @@ export default function StudentDashboard() {
           >
             <GraduationCap className="h-4 w-4 text-slate-500" />
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-700">High School Track</span>
-            <span
-              className={`relative h-5 w-9 rounded-none border transition-colors ${
-                isHighSchoolTrack ? 'border-slate-800 bg-slate-800' : 'border-slate-300 bg-slate-200'
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 h-3.5 w-3.5 bg-white transition-transform ${
-                  isHighSchoolTrack ? 'translate-x-4' : 'translate-x-0.5'
-                }`}
-              />
+            <span className={`relative h-5 w-9 rounded-none border transition-colors ${isHighSchoolTrack ? 'border-slate-800 bg-slate-800' : 'border-slate-300 bg-slate-200'}`}>
+              <span className={`absolute top-0.5 h-3.5 w-3.5 bg-white transition-transform ${isHighSchoolTrack ? 'translate-x-4' : 'translate-x-0.5'}`} />
             </span>
           </button>
         </header>
 
         {/* Status Banner */}
-        <StatusBanner
-          status={currentStage}
-          hasPendingDocuments={hasPendingDocuments}
-          applicationCount={allApplications.length}
-        />
+        <StatusBanner status={currentStage} hasPendingDocuments={hasPendingDocuments} applicationCount={allApplications.length} />
 
         {/* Unlisted University Banner */}
         {isVaultLocked && (
           <div className="flex items-center gap-3 border border-amber-500 bg-amber-50 p-4 rounded-none">
             <Lock className="h-4 w-4 shrink-0 text-amber-600" />
             <p className="text-sm text-amber-800">
-              Your request for <span className="font-semibold">{unlisted.name}</span> (an unlisted university) is awaiting
-              Home Admin verification. Compliance tasks unlock automatically once it is approved.
+              Your request for <span className="font-semibold">{unlisted.name}</span> is awaiting verification.
             </p>
           </div>
         )}
 
         {/* 1. Progress Board */}
-        <ProgressBoard
-          currentStageKey={currentStage}
-          applicationCount={allApplications.length}
-        />
+        <ProgressBoard currentStageKey={currentStage} applicationCount={allApplications.length} />
 
         {/* 2. My Applications */}
-        <MyApplications
-          applications={allApplications}
-          onRefresh={loadInitialData}
-        />
+        <MyApplications applications={allApplications} onRefresh={loadInitialData} />
 
         {/* 3. Pre-Application Catalog */}
-        <UniversityCatalog
-          existingApplications={allApplications}
-          onApplied={loadInitialData}
-        />
+        <UniversityCatalog existingApplications={allApplications} onApplied={loadInitialData} />
 
         {/* 4. Compliance Checklist Vault */}
         <LockOverlay isLocked={isVaultLocked} reason="Locked until your unlisted university is verified">

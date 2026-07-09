@@ -2,13 +2,14 @@
 // Registration page with role selector, student-type toggle
 // (University Exchange Student vs High School Applicant).
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
   GraduationCap, AlertCircle, Loader2, CheckCircle,
-  School, BookOpen, Info,
+  School, BookOpen, Info, Building2,
 } from 'lucide-react';
+import { getUniversities } from '../../api/client';
 
 // Three account roles — map directly to backend User.Role choices
 const ROLES = [
@@ -37,6 +38,9 @@ export default function RegisterPage() {
   const { register } = useAuth();
   const navigate = useNavigate();
 
+  const [universities, setUniversities] = useState([]);
+  const [isLoadingUniversities, setIsLoadingUniversities] = useState(false);
+
   const [form, setForm] = useState({
     email: '',
     first_name: '',
@@ -61,6 +65,24 @@ export default function RegisterPage() {
   const isHostCoord = form.role === 'HOST_COORD';
   const isHighSchool = form.student_type === 'HIGH_SCHOOL';
   const isUniversityStudent = isStudent && !isHighSchool;
+
+  // ── Fetch universities for dropdown ──────────────────────────────────────
+  useEffect(() => {
+    if (isHostCoord) {
+      setIsLoadingUniversities(true);
+      getUniversities()
+        .then((response) => {
+          const data = response.data.results || response.data || [];
+          setUniversities(data);
+        })
+        .catch(() => {
+          setUniversities([]);
+        })
+        .finally(() => {
+          setIsLoadingUniversities(false);
+        });
+    }
+  }, [isHostCoord]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -133,7 +155,7 @@ export default function RegisterPage() {
     try {
       const user = await register(payload);
       setSuccess(true);
-      
+
       // Route to the correct dashboard
       if (user.role === 'STUDENT') navigate('/student');
       else if (user.role === 'HOME_ADMIN') navigate('/admin');
@@ -141,7 +163,6 @@ export default function RegisterPage() {
     } catch (err) {
       const data = err?.response?.data;
       if (data && typeof data === 'object') {
-        // Handle field-specific errors
         const fieldErrors = {};
         Object.keys(data).forEach((key) => {
           if (Array.isArray(data[key])) {
@@ -224,19 +245,32 @@ export default function RegisterPage() {
                   <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">
                     Assigned University <span className="text-crimson-600">*</span>
                   </label>
-                  <select
-                    name="host_university"
-                    value={form.host_university}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 bg-white border border-surface-300 rounded text-sm text-ink-900 focus:border-gold-500 focus:outline-none"
-                  >
-                    <option value="">Select a university...</option>
-                    <option value="1">Harvard University</option>
-                    <option value="2">Stanford University</option>
-                    <option value="3">University of Cambridge</option>
-                    {/* Add more universities as needed */}
-                  </select>
+                  {isLoadingUniversities ? (
+                    <div className="flex items-center gap-2 border border-surface-300 px-3 py-2 text-sm text-slate-500">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading universities...
+                    </div>
+                  ) : (
+                    <select
+                      name="host_university"
+                      value={form.host_university}
+                      onChange={handleChange}
+                      className="w-full border border-surface-300 bg-white px-3 py-2 text-sm text-ink-900 rounded-none focus:border-gold-500 focus:outline-none"
+                    >
+                      <option value="">Select a university...</option>
+                      {universities.map((uni) => (
+                        <option key={uni.id} value={uni.id}>
+                          {uni.display_name || uni.name} ({uni.country})
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   {errors.host_university && <p className="text-xs text-crimson-600 mt-1">{errors.host_university}</p>}
+                  {universities.length === 0 && !isLoadingUniversities && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      No universities available. Please contact an administrator.
+                    </p>
+                  )}
                 </div>
               )}
 

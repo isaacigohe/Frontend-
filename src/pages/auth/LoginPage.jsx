@@ -30,7 +30,10 @@ export default function LoginPage() {
     try {
       const user = await login(form.email, form.password);
       
+      console.log('🔍 User role:', user.role); // Debug log
+      
       // ── ROUTE BY ROLE ──────────────────────────────────────────────────
+      // IMPORTANT: Exact role values from backend
       if (user.role === 'STUDENT') {
         navigate('/student');
       } else if (user.role === 'HOME_ADMIN') {
@@ -38,6 +41,7 @@ export default function LoginPage() {
       } else if (user.role === 'HOST_COORD') {
         navigate('/coordinator');
       } else {
+        console.warn('Unknown role:', user.role);
         navigate('/');
       }
     } catch (err) {

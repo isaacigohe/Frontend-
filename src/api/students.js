@@ -1,15 +1,7 @@
 // =============================================================================
-// src/api/students.js  (REWRITTEN to delegate to client.js)
+// src/api/students.js
 // -----------------------------------------------------------------------------
-// This file no longer talks to Axios directly. Every call below wraps an
-// already-verified function exported from client.js — that's the single
-// source of truth for endpoint paths, HTTP methods, and payload shapes
-// (e.g. the upload field is `file_attachment` via PATCH, not `file` via
-// POST — that mismatch in the previous version of this file would have
-// silently broken every document upload).
-//
-// StudentDashboard.jsx does NOT need to change — every exported function
-// name and return shape below is unchanged from before.
+// Student API calls - supports multiple applications per student.
 // =============================================================================
 
 import {
@@ -21,68 +13,120 @@ import {
   submitApplication,
   getDocumentChecklist as getDocumentChecklistRaw,
   uploadDocument as uploadDocumentRaw,
+  getUniversityPrograms,
 } from './client';
 import { normalizeList } from './utils';
 
-// Private helper: fetch the logged-in student's own application record.
-// Assumes GET /applications/ is scoped server-side to return only the
-// requesting student's own application(s), and that a student has at most
-// one active application (confirmed with you — one at a time).
-async function getMyApplication() {
-  const response = await getApplications();
-  const list = Array.isArray(response.data) ? response.data : response.data.results ?? [];
-  return list[0] ?? null;
-}
-
+// ── Get student profile ──────────────────────────────────────────────────────
 export function getStudentProfile() {
   return getMyProfile();
 }
 
+// ── Get ALL applications for the logged-in student ─────────────────────────
+export async function getStudentApplications() {
+  const response = await getApplications();
+  const list = Array.isArray(response.data) ? response.data : response.data.results ?? [];
+  return list;
+}
+
+// ── Get application progress (first application - used by dashboard header) ─
 export async function getApplicationProgress() {
-  const application = await getMyApplication();
+  const applications = await getStudentApplications();
+  const firstApp = applications[0] || null;
   return {
     data: {
-      status: application ? application.status : 'DRAFT',
-      applicationId: application?.id ?? null,
-      universityName: application?.university_name ?? application?.university?.name ?? null,
+      status: firstApp ? firstApp.status : 'DRAFT',
+      applicationId: firstApp?.id ?? null,
+      universityName: firstApp?.university_name ?? firstApp?.destination_university?.name ?? null,
+      totalApplications: applications.length,
+      applications: applications,
     },
   };
 }
 
-// GET a paginated slice of the university catalog, normalized to always
-// return { results, count } regardless of whether the backend paginates.
+// ── Get universities catalog ────────────────────────────────────────────────
 export async function getUniversities(params) {
   const response = await getUniversitiesRaw(params);
   const { results, count } = normalizeList(response.data);
   return { data: { results, count } };
 }
 
-export async function getDocumentChecklist() {
-  const application = await getMyApplication();
-  if (!application) return { data: [] };
-  return getDocumentChecklistRaw(application.id);
+// ── Get programs for a specific university ──────────────────────────────────
+export async function getUniversityProgramsList(universityId) {
+  const response = await getUniversityPrograms(universityId);
+  return response.data;
 }
 
-// Delegates straight to client.js's uploadDocument — which correctly PATCHes
-// with a `file_attachment` field, matching your real DocumentUploadView.
+// ── Create application for a specific program ───────────────────────────────
+export async function applyToProgram(universityId, programId) {
+  const payload = {
+    destination_university: universityId,
+    program: programId,
+    status: 'DRAFT',
+  };
+  const createResponse = await createApplication(payload);
+  const applicationId = createResponse.data.id;
+  // Submit immediately so it moves to SUBMITTED
+  const submitResponse = await submitApplication(applicationId);
+  return submitResponse.data ?? createResponse.data;
+}
+
+// ── Create application for a university (without program) ───────────────────
+export async function applyToUniversity(universityId) {
+  const payload = {
+    destination_university: universityId,
+    status: 'DRAFT',
+  };
+  const createResponse = await createApplication(payload);
+  const applicationId = createResponse.data.id;
+  const submitResponse = await submitApplication(applicationId);
+  return submitResponse.data ?? createResponse.data;
+}
+
+// ── Document checklist ──────────────────────────────────────────────────────
+export async function getDocumentChecklist() {
+  const applications = await getStudentApplications();
+  const activeApp = applications.find((app) => app.status === 'COMPLIANCE_PHASE');
+  if (!activeApp) return { data: [] };
+  return getDocumentChecklistRaw(activeApp.id);
+}
+
+// ── Upload document ─────────────────────────────────────────────────────────
 export function uploadDocument(documentId, file) {
   return uploadDocumentRaw(documentId, file);
 }
 
+// ── High School tracking ────────────────────────────────────────────────────
 export function updateHighSchoolTracking(isEnabled) {
   return updateMyProfile({ is_high_school_track: isEnabled });
 }
 
-// Implements the approved "Select University -> Create Application" flow:
-// create a DRAFT application, then immediately submit it.
-//
-// CONFIRMED against applications/models.py: the foreign key field on
-// Application is `destination_university`, not `university`. This was
-// wrong in the previous version of this file and would have 400'd on
-// every single application attempt — thanks for pasting the model.
-export async function applyToUniversity(universityId) {
-  const createResponse = await createApplication({ destination_university: universityId });
-  const applicationId = createResponse.data.id;
-  const submitResponse = await submitApplication(applicationId);
-  return submitResponse.data ?? createResponse.data;
+// ── Get a specific application by ID ────────────────────────────────────────
+export async function getApplicationById(applicationId) {
+  const applications = await getStudentApplications();
+  return applications.find((app) => app.id === applicationId) || null;
+}
+
+// ── Check if a student has already applied to a specific program ────────────
+export async function hasAppliedToProgram(programId) {
+  const applications = await getStudentApplications();
+  return applications.some((app) => app.program === programId);
+}
+
+// ── Get applications grouped by university ──────────────────────────────────
+export async function getApplicationsByUniversity() {
+  const applications = await getStudentApplications();
+  const grouped = {};
+  applications.forEach((app) => {
+    const uniName = app.university_name || app.destination_university?.name || 'Unknown';
+    if (!grouped[uniName]) {
+      grouped[uniName] = {
+        universityId: app.destination_university,
+        universityName: uniName,
+        applications: [],
+      };
+    }
+    grouped[uniName].applications.push(app);
+  });
+  return Object.values(grouped);
 }

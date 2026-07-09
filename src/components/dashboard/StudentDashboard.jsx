@@ -2,13 +2,8 @@
 // StudentDashboard.jsx
 // -----------------------------------------------------------------------------
 // PHASE 3 — GlobalScholar Student Workspace
-//
-// This component is the primary landing workspace for an authenticated
-// STUDENT user. It is composed of four functional regions:
-//   1. Interactive Progress Board  (application pipeline state machine)
-//   2. Pre-Application Catalog     (paginated university browser + filters)
-//   3. Compliance Checklist Vault  (document status table + upload form + BULK UPLOAD)
-//   4. Student Settings Strip      (High School tracking toggle)
+// Includes visual indicators: Status Banner, Enhanced Progress Board,
+// Document Summary, and Action Required badges.
 // =============================================================================
 
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
@@ -29,7 +24,6 @@ import {
   School,
   Globe,
   Languages,
-  X,
   Loader2,
   CircleCheck,
   CircleDashed,
@@ -62,6 +56,115 @@ const PIPELINE_STAGES = [
 const PAGE_SIZE = 10;
 const COUNTRY_OPTIONS = ['All Countries', 'United States', 'United Kingdom', 'Germany', 'Japan', 'South Korea', 'Australia', 'France', 'Spain'];
 const LANGUAGE_OPTIONS = ['All Languages', ...LANGUAGE_CHOICES];
+
+// ── STATUS BANNER ─────────────────────────────────────────────────────────────
+// Displays current application status with color-coded banner
+function StatusBanner({ status, hasPendingDocuments }) {
+  const statusMap = {
+    DRAFT: { label: 'Draft', color: 'bg-slate-100 border-slate-300 text-slate-700', text: 'Your application is in draft mode. Complete and submit when ready.' },
+    SUBMITTED: { label: 'Submitted', color: 'bg-navy-50 border-navy-200 text-navy-700', text: 'Your application has been submitted and is awaiting review.' },
+    UNDER_REVIEW: { label: 'Under Review', color: 'bg-amber-50 border-amber-200 text-amber-700', text: 'Your application is currently being reviewed by the admin.' },
+    COMPLIANCE_PHASE: { label: 'Compliance Phase', color: 'bg-gold-50 border-gold-300 text-navy-900', text: 'Your application has reached the compliance phase. Please upload all required documents below.' },
+    APPROVED: { label: 'Approved', color: 'bg-emerald-50 border-emerald-200 text-emerald-700', text: 'Congratulations! Your application has been approved.' },
+    REJECTED: { label: 'Rejected', color: 'bg-crimson-50 border-crimson-200 text-crimson-700', text: 'Your application has been rejected. Please review the reason provided.' },
+  };
+
+  const info = statusMap[status] || statusMap.DRAFT;
+  const isCompliance = status === 'COMPLIANCE_PHASE';
+
+  return (
+    <div className={`border p-4 rounded-none ${info.color}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide">Current Status</p>
+          <p className="text-base font-bold">{info.label}</p>
+          <p className="text-sm mt-0.5">{info.text}</p>
+        </div>
+        {isCompliance && hasPendingDocuments && (
+          <span className="border border-red-500 bg-red-50 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-red-700">
+            Action Required
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── PROGRESS BOARD (Enhanced with "You are here" indicator) ──────────────────
+function ProgressBoard({ currentStageKey }) {
+  const currentIndex = PIPELINE_STAGES.findIndex((stage) => stage.key === currentStageKey);
+  const stageLabels = {
+    DRAFT: 'Complete and submit',
+    SUBMITTED: 'Awaiting review',
+    UNDER_REVIEW: 'Admin reviewing',
+    COMPLIANCE_PHASE: 'Upload documents',
+    APPROVED: 'Complete',
+  };
+
+  return (
+    <section className="border border-slate-200 bg-white shadow-sm rounded-none p-6">
+      <div className="flex flex-wrap items-center justify-between mb-4">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">Application Pipeline</h2>
+        <span className="text-xs text-slate-500">
+          Stage {currentIndex + 1} of {PIPELINE_STAGES.length}
+        </span>
+      </div>
+
+      {/* Step indicators */}
+      <div className="flex items-center">
+        {PIPELINE_STAGES.map((stage, index) => {
+          const StageIcon = stage.icon;
+          const isComplete = index < currentIndex;
+          const isActive = index === currentIndex;
+          const isLast = index === PIPELINE_STAGES.length - 1;
+
+          return (
+            <div key={stage.key} className={`flex items-center ${isLast ? '' : 'flex-1'}`}>
+              <div className="flex flex-col items-center gap-1.5">
+                <div
+                  className={`flex h-10 w-10 items-center justify-center border-2 rounded-none ${
+                    isComplete
+                      ? 'border-slate-800 bg-slate-800 text-white'
+                      : isActive
+                      ? 'border-gold-500 bg-gold-500 text-navy-900'
+                      : 'border-slate-300 bg-white text-slate-300'
+                  }`}
+                >
+                  {isComplete ? <CircleCheck className="h-5 w-5" /> : <StageIcon className="h-5 w-5" />}
+                </div>
+                <span
+                  className={`text-center text-[11px] font-semibold uppercase tracking-wide ${
+                    isActive ? 'text-gold-700' : isComplete ? 'text-slate-600' : 'text-slate-400'
+                  }`}
+                >
+                  {stage.label}
+                </span>
+                <span className="text-center text-[9px] text-slate-400">
+                  {isActive ? '◀ You are here' : isComplete ? '✓ Done' : ''}
+                </span>
+              </div>
+              {!isLast && <div className={`mx-2 h-0.5 flex-1 ${isComplete ? 'bg-slate-800' : 'bg-slate-300'}`} />}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Next step hint */}
+      <div className="mt-4 border-t border-slate-200 pt-3">
+        <p className="text-xs text-slate-500">
+          {currentIndex < PIPELINE_STAGES.length - 1 ? (
+            <>
+              <span className="font-semibold">Next step:</span>{' '}
+              {stageLabels[currentStageKey] || 'Proceed to next stage'}
+            </>
+          ) : (
+            <span className="font-semibold text-emerald-600">Application process complete!</span>
+          )}
+        </p>
+      </div>
+    </section>
+  );
+}
 
 // ── SMALL PRESENTATIONAL SUBCOMPONENTS ──────────────────────────────────────
 
@@ -167,48 +270,36 @@ function LockOverlay({ isLocked, reason, children }) {
   );
 }
 
-// ── PROGRESS BOARD ──────────────────────────────────────────────────────────
-function ProgressBoard({ currentStageKey }) {
-  const currentIndex = PIPELINE_STAGES.findIndex((stage) => stage.key === currentStageKey);
+// ── DOCUMENT SUMMARY ────────────────────────────────────────────────────────
+// Shows progress bar and count of uploaded documents
+function DocumentSummary({ checklist }) {
+  const total = checklist.length;
+  const uploaded = checklist.filter((doc) => doc.file_attachment !== null && doc.file_attachment !== '').length;
+  const approved = checklist.filter((doc) => doc.verification_status === 'APPROVED').length;
+  const pending = total - uploaded;
+  const percentage = total > 0 ? Math.round((uploaded / total) * 100) : 0;
 
   return (
-    <section className="border border-slate-200 bg-white shadow-sm rounded-none p-6">
-      <h2 className="mb-6 text-sm font-bold uppercase tracking-wide text-slate-700">Application Pipeline</h2>
-      <div className="flex items-center">
-        {PIPELINE_STAGES.map((stage, index) => {
-          const StageIcon = stage.icon;
-          const isComplete = index < currentIndex;
-          const isActive = index === currentIndex;
-          const isLast = index === PIPELINE_STAGES.length - 1;
-
-          return (
-            <div key={stage.key} className={`flex items-center ${isLast ? '' : 'flex-1'}`}>
-              <div className="flex flex-col items-center gap-2">
-                <div
-                  className={`flex h-10 w-10 items-center justify-center border-2 rounded-none ${
-                    isComplete
-                      ? 'border-slate-800 bg-slate-800 text-white'
-                      : isActive
-                      ? 'border-slate-800 bg-white text-slate-800'
-                      : 'border-slate-300 bg-white text-slate-300'
-                  }`}
-                >
-                  {isComplete ? <CircleCheck className="h-5 w-5" /> : <StageIcon className="h-5 w-5" />}
-                </div>
-                <span
-                  className={`text-center text-[11px] font-semibold uppercase tracking-wide ${
-                    isActive ? 'text-slate-900' : isComplete ? 'text-slate-600' : 'text-slate-400'
-                  }`}
-                >
-                  {stage.label}
-                </span>
-              </div>
-              {!isLast && <div className={`mx-2 h-0.5 flex-1 ${isComplete ? 'bg-slate-800' : 'bg-slate-300'}`} />}
-            </div>
-          );
-        })}
+    <div className="border border-slate-200 bg-slate-50 p-3 mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+        <span className="font-semibold uppercase tracking-wide text-slate-600">Document Progress</span>
+        <span className="text-slate-600">
+          {uploaded} of {total} uploaded ({percentage}%)
+        </span>
       </div>
-    </section>
+      <div className="mt-1 h-2 w-full bg-slate-200 rounded-none overflow-hidden">
+        <div
+          className="h-full bg-gold-500 transition-all duration-300"
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
+      <div className="mt-1 flex flex-wrap gap-4 text-xs text-slate-500">
+        <span>Total: {total}</span>
+        <span className="text-emerald-600">Uploaded: {uploaded}</span>
+        <span className="text-amber-600">Pending: {pending}</span>
+        <span className="text-emerald-700">Approved: {approved}</span>
+      </div>
+    </div>
   );
 }
 
@@ -471,7 +562,6 @@ function ComplianceVault({ onChecklistChange }) {
     }
   }
 
-  // ── BULK UPLOAD ──────────────────────────────────────────────────────────
   async function handleBulkUpload(event) {
     const files = event.target.files;
     if (!files || files.length === 0) return;
@@ -480,11 +570,8 @@ function ComplianceVault({ onChecklistChange }) {
     setBulkUploadError(null);
 
     try {
-      // Map files to document types based on the field name
-      // Files should be uploaded with keys: passport, transcript, language_test, etc.
       const fileMap = {};
       Array.from(files).forEach((file) => {
-        // Use filename or detect type from file name
         const name = file.name.toLowerCase();
         if (name.includes('passport')) fileMap.passport = file;
         else if (name.includes('transcript')) fileMap.transcript = file;
@@ -498,8 +585,6 @@ function ComplianceVault({ onChecklistChange }) {
         else if (name.includes('housing') || name.includes('confirmation')) fileMap.housing = file;
       });
 
-      // Get application ID from localStorage or context
-      // For now, we'll use the first application ID from the checklist
       if (checklist.length > 0) {
         const applicationId = checklist[0].application;
         await bulkUploadDocuments(applicationId, fileMap);
@@ -515,7 +600,9 @@ function ComplianceVault({ onChecklistChange }) {
     }
   }
 
-  const hasDocuments = checklist.length > 0;
+  const total = checklist.length;
+  const uploaded = checklist.filter((doc) => doc.file_attachment !== null && doc.file_attachment !== '').length;
+  const hasDocuments = total > 0;
   const isInCompliancePhase = checklist.some((item) => 
     item.verification_status === 'PENDING' || 
     item.verification_status === 'AWAITING_REVIEW' || 
@@ -556,6 +643,13 @@ function ComplianceVault({ onChecklistChange }) {
           </div>
         )}
       </div>
+
+      {/* Document Summary */}
+      {hasDocuments && isInCompliancePhase && (
+        <div className="px-6 pt-4">
+          <DocumentSummary checklist={checklist} />
+        </div>
+      )}
 
       {bulkUploadError && (
         <div className="mx-6 mt-3 flex items-center gap-2 border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 rounded-none">
@@ -674,6 +768,7 @@ export default function StudentDashboard() {
   const [activeApplicationUniversityName, setActiveApplicationUniversityName] = useState(null);
   const [isHighSchoolTrack, setIsHighSchoolTrack] = useState(false);
   const [isTogglingHighSchool, setIsTogglingHighSchool] = useState(false);
+  const [checklist, setChecklist] = useState([]);
   const [hasActionRequiredItems, setHasActionRequiredItems] = useState(false);
 
   const loadInitialData = useCallback(async () => {
@@ -715,6 +810,11 @@ export default function StudentDashboard() {
     }
   }
 
+  // Check if there are pending documents (for Action Required badge)
+  const hasPendingDocuments = checklist.some(
+    (doc) => doc.verification_status === 'PENDING' || doc.verification_status === 'ACTION_REQUIRED'
+  );
+
   const unlisted = profile?.unlisted_university_request;
   const isVaultLocked = Boolean(unlisted && unlisted.requested && !unlisted.verified);
 
@@ -753,6 +853,9 @@ export default function StudentDashboard() {
           </button>
         </header>
 
+        {/* Status Banner */}
+        <StatusBanner status={currentStage} hasPendingDocuments={hasPendingDocuments} />
+
         {/* Unlisted University Banner */}
         {isVaultLocked && (
           <div className="flex items-center gap-3 border border-amber-500 bg-amber-50 p-4 rounded-none">
@@ -776,7 +879,10 @@ export default function StudentDashboard() {
 
         {/* 3. Compliance Checklist Vault */}
         <LockOverlay isLocked={isVaultLocked} reason="Locked until your unlisted university is verified">
-          <ComplianceVault onChecklistChange={(items) => setHasActionRequiredItems(items.some((i) => i.status === 'ACTION_REQUIRED'))} />
+          <ComplianceVault onChecklistChange={(items) => {
+            setChecklist(items);
+            setHasActionRequiredItems(items.some((i) => i.verification_status === 'ACTION_REQUIRED'));
+          }} />
         </LockOverlay>
 
         {/* Action Required Banner */}

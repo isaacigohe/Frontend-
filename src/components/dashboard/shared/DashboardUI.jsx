@@ -206,3 +206,5 @@ export const DEGREE_LEVEL_LABELS = {
 export function degreeLevelLabel(code) {
   return DEGREE_LEVEL_LABELS[code] || code;
 }
+// Add this to the exports at the bottom of DashboardUI.jsx
+export { ProgressBar } from './ProgressBar';

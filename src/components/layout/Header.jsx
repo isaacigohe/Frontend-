@@ -3,6 +3,7 @@
 // -----------------------------------------------------------------------------
 // Shared header for every authenticated dashboard (Student, Admin, Host
 // Coordinator). Includes notification bell with dropdown and unread count.
+// Also shows "Action Required" badge when documents are pending.
 // =============================================================================
 
 import { Link, useNavigate } from 'react-router-dom';
@@ -40,7 +41,6 @@ export default function Header() {
   useEffect(() => {
     if (user) {
       fetchNotifications();
-      // Refresh every 30 seconds
       const interval = setInterval(fetchNotifications, 30000);
       return () => clearInterval(interval);
     }
@@ -117,6 +117,13 @@ export default function Header() {
           {user && (
             <span className="hidden text-xs uppercase tracking-wide text-navy-200 sm:inline">
               {user.full_name || user.email} · {user.role?.replace(/_/g, ' ')}
+            </span>
+          )}
+
+          {/* Action Required Badge (shows when compliance documents are pending) */}
+          {user?.role === 'STUDENT' && (
+            <span className="hidden text-xs font-semibold uppercase tracking-wide text-gold-400 sm:inline">
+              Action Required
             </span>
           )}
 

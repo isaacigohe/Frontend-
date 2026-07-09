@@ -1,15 +1,13 @@
 // src/pages/auth/RegisterPage.jsx
-// Registration page with role selector, student-type toggle
-// (University Exchange Student vs High School Applicant).
+// Registration page with role selector and student-type toggle.
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
   GraduationCap, AlertCircle, Loader2, CheckCircle,
-  School, BookOpen, Info, Building2,
+  School, BookOpen, Info,
 } from 'lucide-react';
-import { getUniversities } from '../../api/client';
 
 // Three account roles — map directly to backend User.Role choices
 const ROLES = [
@@ -38,9 +36,6 @@ export default function RegisterPage() {
   const { register } = useAuth();
   const navigate = useNavigate();
 
-  const [universities, setUniversities] = useState([]);
-  const [isLoadingUniversities, setIsLoadingUniversities] = useState(false);
-
   const [form, setForm] = useState({
     email: '',
     first_name: '',
@@ -53,7 +48,6 @@ export default function RegisterPage() {
     major: '',
     home_institution: '',
     enrollment_year: '',
-    host_university: '',
   });
 
   const [errors, setErrors] = useState({});
@@ -62,27 +56,8 @@ export default function RegisterPage() {
   const [success, setSuccess] = useState(false);
 
   const isStudent = form.role === 'STUDENT';
-  const isHostCoord = form.role === 'HOST_COORD';
   const isHighSchool = form.student_type === 'HIGH_SCHOOL';
   const isUniversityStudent = isStudent && !isHighSchool;
-
-  // ── Fetch universities for dropdown ──────────────────────────────────────
-  useEffect(() => {
-    if (isHostCoord) {
-      setIsLoadingUniversities(true);
-      getUniversities()
-        .then((response) => {
-          const data = response.data.results || response.data || [];
-          setUniversities(data);
-        })
-        .catch(() => {
-          setUniversities([]);
-        })
-        .finally(() => {
-          setIsLoadingUniversities(false);
-        });
-    }
-  }, [isHostCoord]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -100,10 +75,6 @@ export default function RegisterPage() {
     if (form.password.length < 8) e.password = 'Minimum 8 characters.';
     if (form.password !== form.password_confirm)
       e.password_confirm = 'Passwords do not match.';
-
-    if (isHostCoord && !form.host_university) {
-      e.host_university = 'Please select a university for Host Coordinator.';
-    }
 
     if (isUniversityStudent) {
       if (!form.gpa) e.gpa = 'GPA is required for university exchange students.';
@@ -136,11 +107,6 @@ export default function RegisterPage() {
       password: form.password,
     };
 
-    // Add host_university for Host Coordinators
-    if (isHostCoord) {
-      payload.host_university = parseInt(form.host_university);
-    }
-
     // Add student fields
     if (isStudent) {
       payload.student_type = form.student_type;
@@ -160,6 +126,7 @@ export default function RegisterPage() {
       if (user.role === 'STUDENT') navigate('/student');
       else if (user.role === 'HOME_ADMIN') navigate('/admin');
       else if (user.role === 'HOST_COORD') navigate('/coordinator');
+      else navigate('/');
     } catch (err) {
       const data = err?.response?.data;
       if (data && typeof data === 'object') {
@@ -238,41 +205,6 @@ export default function RegisterPage() {
                   ))}
                 </div>
               </div>
-
-              {/* Host Coordinator - University Selection */}
-              {isHostCoord && (
-                <div>
-                  <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">
-                    Assigned University <span className="text-crimson-600">*</span>
-                  </label>
-                  {isLoadingUniversities ? (
-                    <div className="flex items-center gap-2 border border-surface-300 px-3 py-2 text-sm text-slate-500">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading universities...
-                    </div>
-                  ) : (
-                    <select
-                      name="host_university"
-                      value={form.host_university}
-                      onChange={handleChange}
-                      className="w-full border border-surface-300 bg-white px-3 py-2 text-sm text-ink-900 rounded-none focus:border-gold-500 focus:outline-none"
-                    >
-                      <option value="">Select a university...</option>
-                      {universities.map((uni) => (
-                        <option key={uni.id} value={uni.id}>
-                          {uni.display_name || uni.name} ({uni.country})
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                  {errors.host_university && <p className="text-xs text-crimson-600 mt-1">{errors.host_university}</p>}
-                  {universities.length === 0 && !isLoadingUniversities && (
-                    <p className="text-xs text-amber-600 mt-1">
-                      No universities available. Please contact an administrator.
-                    </p>
-                  )}
-                </div>
-              )}
 
               {/* Student category toggle */}
               {isStudent && (

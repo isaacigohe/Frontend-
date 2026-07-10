@@ -30,6 +30,7 @@ import {
   Upload,
   Building2,
   ExternalLink,
+  FileText,  // <-- ADDED
 } from 'lucide-react';
 import {
   getStudentProfile,
@@ -355,7 +356,6 @@ function ComplianceVault({ onChecklistChange }) {
   const [isFetching, setIsFetching] = useState(false);
 
   const fetchChecklist = useCallback(async () => {
-    // Prevent multiple simultaneous requests
     if (isFetching) return;
     
     setIsFetching(true);
@@ -368,7 +368,6 @@ function ComplianceVault({ onChecklistChange }) {
       if (onChecklistChange) onChecklistChange(data);
     } catch (err) {
       console.error('Failed to fetch checklist:', err);
-      // Don't show error for 429 - just use empty data
       if (err.response?.status === 429) {
         setChecklist([]);
         if (onChecklistChange) onChecklistChange([]);
@@ -456,7 +455,6 @@ function ComplianceVault({ onChecklistChange }) {
     item.verification_status === 'ACTION_REQUIRED'
   );
 
-  // ── ERROR STATE ────────────────────────────────────────────────────────────
   if (error) {
     return (
       <section className="border border-slate-200 bg-white shadow-sm rounded-none">
@@ -478,7 +476,6 @@ function ComplianceVault({ onChecklistChange }) {
     );
   }
 
-  // ── LOADING STATE ──────────────────────────────────────────────────────────
   if (isLoading) {
     return (
       <section className="border border-slate-200 bg-white shadow-sm rounded-none">
@@ -494,7 +491,6 @@ function ComplianceVault({ onChecklistChange }) {
     );
   }
 
-  // ── EMPTY STATE ────────────────────────────────────────────────────────────
   if (!hasDocuments) {
     return (
       <section className="border border-slate-200 bg-white shadow-sm rounded-none">
@@ -515,7 +511,6 @@ function ComplianceVault({ onChecklistChange }) {
     );
   }
 
-  // ── DOCUMENTS LIST ──────────────────────────────────────────────────────────
   return (
     <section className="border border-slate-200 bg-white shadow-sm rounded-none">
       <div className="flex flex-wrap items-center justify-between border-b border-slate-200 p-6">
@@ -650,7 +645,6 @@ function UniversityCatalog({ existingApplications, onApplied }) {
   const [applyingToUniversity, setApplyingToUniversity] = useState(null);
   const [applyError, setApplyError] = useState(null);
 
-  // Debounce search
   useEffect(() => {
     const timeoutId = setTimeout(() => setSearchQuery(searchInput), 400);
     return () => clearTimeout(timeoutId);
@@ -824,7 +818,6 @@ function UniversityCatalog({ existingApplications, onApplied }) {
 
             return (
               <div key={uni.id} className="border-b border-slate-100">
-                {/* University Row - Click to expand */}
                 <div
                   onClick={() => handleToggleUniversity(uni.id)}
                   className={`flex cursor-pointer items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-colors ${isExpanded ? 'bg-slate-50' : ''}`}
@@ -844,7 +837,6 @@ function UniversityCatalog({ existingApplications, onApplied }) {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    {/* Apply to University button */}
                     {!alreadyAppliedToUniversity && (
                       <button
                         type="button"
@@ -866,7 +858,6 @@ function UniversityCatalog({ existingApplications, onApplied }) {
                   </div>
                 </div>
 
-                {/* Programs List (expanded) */}
                 {isExpanded && (
                   <div className="bg-slate-50 px-6 py-4">
                     {!cache || cache.status === 'loading' ? (
@@ -1040,7 +1031,6 @@ export default function StudentDashboard() {
   return (
     <div className="bg-slate-100 p-6 pb-6">
       <div className="mx-auto max-w-6xl space-y-6">
-        {/* Header Strip */}
         <header className="flex flex-wrap items-center justify-between gap-4 border border-slate-200 bg-white shadow-sm rounded-none p-6">
           <div>
             <h1 className="text-lg font-bold text-slate-900">Student Workspace</h1>
@@ -1064,10 +1054,8 @@ export default function StudentDashboard() {
           </button>
         </header>
 
-        {/* Status Banner */}
         <StatusBanner status={currentStage} hasPendingDocuments={hasPendingDocuments} applicationCount={allApplications.length} />
 
-        {/* Unlisted University Banner */}
         {isVaultLocked && (
           <div className="flex items-center gap-3 border border-amber-500 bg-amber-50 p-4 rounded-none">
             <Lock className="h-4 w-4 shrink-0 text-amber-600" />
@@ -1077,26 +1065,20 @@ export default function StudentDashboard() {
           </div>
         )}
 
-        {/* 1. Progress Board */}
         <ProgressBoard currentStageKey={currentStage} applicationCount={allApplications.length} />
 
-        {/* 2. My Applications */}
         <MyApplications applications={allApplications} onRefresh={loadInitialData} />
 
-        {/* 3. Pre-Application Catalog */}
         <UniversityCatalog existingApplications={allApplications} onApplied={loadInitialData} />
 
-        {/* 4. Compliance Checklist Vault */}
         <LockOverlay isLocked={isVaultLocked} reason="Locked until your unlisted university is verified">
           <ComplianceVault onChecklistChange={(items) => {
-            // Ensure items is always an array
             const safeItems = Array.isArray(items) ? items : [];
             setChecklist(safeItems);
             setHasActionRequiredItems(safeItems.some((i) => i.verification_status === 'ACTION_REQUIRED'));
           }} />
         </LockOverlay>
 
-        {/* Action Required Banner */}
         {!isVaultLocked && hasActionRequiredItems && (
           <div className="flex items-center gap-2 border border-red-300 bg-red-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-red-700 rounded-none">
             <CircleDashed className="h-3.5 w-3.5" />

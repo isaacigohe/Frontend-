@@ -66,7 +66,6 @@ export async function applyToProgram(universityId, programId) {
   };
   const createResponse = await createApplication(payload);
   const applicationId = createResponse.data.id;
-  // Submit immediately so it moves to SUBMITTED
   const submitResponse = await submitApplication(applicationId);
   return submitResponse.data ?? createResponse.data;
 }
@@ -86,9 +85,22 @@ export async function applyToUniversity(universityId) {
 // ── Document checklist ──────────────────────────────────────────────────────
 export async function getDocumentChecklist() {
   const applications = await getStudentApplications();
-  const activeApp = applications.find((app) => app.status === 'COMPLIANCE_PHASE');
+  // Find the active application (any status that has documents)
+  const activeApp = applications.find((app) => 
+    app.status === 'COMPLIANCE_PHASE' || 
+    app.status === 'UNDER_REVIEW' ||
+    app.status === 'SUBMITTED'
+  );
   if (!activeApp) return { data: [] };
-  return getDocumentChecklistRaw(activeApp.id);
+  try {
+    const response = await getDocumentChecklistRaw(activeApp.id);
+    // Ensure we always return an array
+    const data = Array.isArray(response.data) ? response.data : response.data?.results || [];
+    return { data: data };
+  } catch (error) {
+    console.error('Failed to fetch document checklist:', error);
+    return { data: [] };
+  }
 }
 
 // ── Upload document ─────────────────────────────────────────────────────────

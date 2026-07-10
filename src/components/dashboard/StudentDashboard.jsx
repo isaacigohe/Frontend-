@@ -357,13 +357,15 @@ function ComplianceVault({ onChecklistChange }) {
     setError(null);
     try {
       const response = await getDocumentChecklist();
-      const data = response.data || [];
+      // Ensure we always have an array
+      const data = Array.isArray(response.data) ? response.data : [];
       setChecklist(data);
       if (onChecklistChange) onChecklistChange(data);
     } catch (err) {
       console.error('Failed to fetch checklist:', err);
       setError('Could not load checklist. Please refresh.');
       setChecklist([]);
+      if (onChecklistChange) onChecklistChange([]);
     } finally {
       setIsLoading(false);
     }
@@ -803,7 +805,7 @@ function UniversityCatalog({ existingApplications, onApplied }) {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    {/* NEW: Apply to University button */}
+                    {/* Apply to University button */}
                     {!alreadyAppliedToUniversity && (
                       <button
                         type="button"
@@ -1048,8 +1050,10 @@ export default function StudentDashboard() {
         {/* 4. Compliance Checklist Vault */}
         <LockOverlay isLocked={isVaultLocked} reason="Locked until your unlisted university is verified">
           <ComplianceVault onChecklistChange={(items) => {
-            setChecklist(items);
-            setHasActionRequiredItems(items.some((i) => i.verification_status === 'ACTION_REQUIRED'));
+            // Ensure items is always an array
+            const safeItems = Array.isArray(items) ? items : [];
+            setChecklist(safeItems);
+            setHasActionRequiredItems(safeItems.some((i) => i.verification_status === 'ACTION_REQUIRED'));
           }} />
         </LockOverlay>
 

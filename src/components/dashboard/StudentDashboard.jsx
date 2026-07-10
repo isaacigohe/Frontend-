@@ -444,6 +444,7 @@ function ComplianceVault({ onChecklistChange }) {
     item.verification_status === 'ACTION_REQUIRED'
   );
 
+  // ── ERROR STATE ────────────────────────────────────────────────────────────
   if (error) {
     return (
       <section className="border border-slate-200 bg-white shadow-sm rounded-none">
@@ -465,6 +466,44 @@ function ComplianceVault({ onChecklistChange }) {
     );
   }
 
+  // ── LOADING STATE ──────────────────────────────────────────────────────────
+  if (isLoading) {
+    return (
+      <section className="border border-slate-200 bg-white shadow-sm rounded-none">
+        <div className="border-b border-slate-200 p-6">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">Compliance Checklist Vault</h2>
+          <p className="mt-1 text-xs text-slate-500">Required documentation for your active application</p>
+        </div>
+        <div className="flex items-center justify-center gap-2 p-10 text-sm text-slate-500">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading checklist…
+        </div>
+      </section>
+    );
+  }
+
+  // ── EMPTY STATE ────────────────────────────────────────────────────────────
+  if (!hasDocuments) {
+    return (
+      <section className="border border-slate-200 bg-white shadow-sm rounded-none">
+        <div className="border-b border-slate-200 p-6">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">Compliance Checklist Vault</h2>
+          <p className="mt-1 text-xs text-slate-500">Required documentation for your active application</p>
+        </div>
+        <div className="p-6 text-center text-sm text-slate-400">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center border border-slate-200 bg-slate-50">
+            <FileText className="h-6 w-6 text-slate-300" />
+          </div>
+          <p>No checklist items assigned yet.</p>
+          <p className="mt-1 text-xs text-slate-400">
+            Your application will generate documents once it reaches the Compliance Phase.
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  // ── DOCUMENTS LIST ──────────────────────────────────────────────────────────
   return (
     <section className="border border-slate-200 bg-white shadow-sm rounded-none">
       <div className="flex flex-wrap items-center justify-between border-b border-slate-200 p-6">
@@ -508,90 +547,76 @@ function ComplianceVault({ onChecklistChange }) {
         </div>
       )}
 
-      {isLoading ? (
-        <div className="flex items-center justify-center gap-2 p-10 text-sm text-slate-500">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading checklist…
-        </div>
-      ) : (
-        <table className="w-full border-collapse text-left text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              <th className="px-6 py-2">Document</th>
-              <th className="px-6 py-2">Status</th>
-              <th className="px-6 py-2">Last Updated</th>
-            </tr>
-          </thead>
-          <tbody>
-            {checklist.map((item) => {
-              const isActionable = item.verification_status === 'PENDING' || item.verification_status === 'ACTION_REQUIRED';
+      <table className="w-full border-collapse text-left text-sm">
+        <thead>
+          <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <th className="px-6 py-2">Document</th>
+            <th className="px-6 py-2">Status</th>
+            <th className="px-6 py-2">Last Updated</th>
+          </tr>
+        </thead>
+        <tbody>
+          {checklist.map((item) => {
+            const isActionable = item.verification_status === 'PENDING' || item.verification_status === 'ACTION_REQUIRED';
 
-              return (
-                <Fragment key={item.id}>
-                  <tr
-                    onClick={() => isActionable && toggleRow(item.id)}
-                    className={`border-b border-slate-100 ${isActionable ? 'cursor-pointer hover:bg-slate-50' : ''}`}
-                  >
-                    <td className="flex items-center gap-2 px-6 py-3 font-medium text-slate-800">
-                      <Paperclip className="h-3.5 w-3.5 text-slate-400" />
-                      {documentTypeLabel(item.document_type)}
-                    </td>
-                    <td className="px-6 py-3">
-                      <ChecklistStatusBadge status={item.verification_status} />
-                    </td>
-                    <td className="px-6 py-3 text-slate-500">{item.updated_at}</td>
-                  </tr>
+            return (
+              <Fragment key={item.id}>
+                <tr
+                  onClick={() => isActionable && toggleRow(item.id)}
+                  className={`border-b border-slate-100 ${isActionable ? 'cursor-pointer hover:bg-slate-50' : ''}`}
+                >
+                  <td className="flex items-center gap-2 px-6 py-3 font-medium text-slate-800">
+                    <Paperclip className="h-3.5 w-3.5 text-slate-400" />
+                    {documentTypeLabel(item.document_type)}
+                  </td>
+                  <td className="px-6 py-3">
+                    <ChecklistStatusBadge status={item.verification_status} />
+                  </td>
+                  <td className="px-6 py-3 text-slate-500">{item.updated_at}</td>
+                </tr>
 
-                  {expandedId === item.id && isActionable && (
-                    <tr className={`border-b border-slate-100 ${item.verification_status === 'ACTION_REQUIRED' ? 'bg-red-50' : 'bg-slate-50'}`}>
-                      <td colSpan={3} className="px-6 py-4">
-                        <div className={`flex items-start gap-3 border bg-white p-4 rounded-none ${item.verification_status === 'ACTION_REQUIRED' ? 'border-red-300' : 'border-slate-300'}`}>
+                {expandedId === item.id && isActionable && (
+                  <tr className={`border-b border-slate-100 ${item.verification_status === 'ACTION_REQUIRED' ? 'bg-red-50' : 'bg-slate-50'}`}>
+                    <td colSpan={3} className="px-6 py-4">
+                      <div className={`flex items-start gap-3 border bg-white p-4 rounded-none ${item.verification_status === 'ACTION_REQUIRED' ? 'border-red-300' : 'border-slate-300'}`}>
+                        {item.verification_status === 'ACTION_REQUIRED' ? (
+                          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+                        ) : (
+                          <UploadCloud className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                        )}
+                        <div className="flex-1">
                           {item.verification_status === 'ACTION_REQUIRED' ? (
-                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+                            <>
+                              <p className="text-xs font-semibold uppercase tracking-wide text-red-700">Reviewer Comment</p>
+                              <p className="mt-1 text-sm text-slate-700">{item.admin_comment}</p>
+                            </>
                           ) : (
-                            <UploadCloud className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Upload this document to begin review.</p>
                           )}
-                          <div className="flex-1">
-                            {item.verification_status === 'ACTION_REQUIRED' ? (
-                              <>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-red-700">Reviewer Comment</p>
-                                <p className="mt-1 text-sm text-slate-700">{item.admin_comment}</p>
-                              </>
-                            ) : (
-                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Upload this document to begin review.</p>
-                            )}
-                            <div className="mt-3 flex items-center gap-3">
-                              <label className="flex cursor-pointer items-center gap-2 border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-700 rounded-none hover:border-slate-500">
-                                <UploadCloud className="h-3.5 w-3.5" />
-                                {uploadingId === item.id ? 'Uploading…' : item.verification_status === 'ACTION_REQUIRED' ? 'Choose Replacement File' : 'Choose File'}
-                                <input
-                                  type="file"
-                                  className="hidden"
-                                  disabled={uploadingId === item.id}
-                                  onChange={(event) => handleFileSelected(item.id, event)}
-                                />
-                              </label>
-                              {uploadingId === item.id && <Loader2 className="h-4 w-4 animate-spin text-slate-500" />}
-                            </div>
-                            {uploadError && <p className="mt-2 text-xs font-semibold text-red-600">{uploadError}</p>}
+                          <div className="mt-3 flex items-center gap-3">
+                            <label className="flex cursor-pointer items-center gap-2 border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-700 rounded-none hover:border-slate-500">
+                              <UploadCloud className="h-3.5 w-3.5" />
+                              {uploadingId === item.id ? 'Uploading…' : item.verification_status === 'ACTION_REQUIRED' ? 'Choose Replacement File' : 'Choose File'}
+                              <input
+                                type="file"
+                                className="hidden"
+                                disabled={uploadingId === item.id}
+                                onChange={(event) => handleFileSelected(item.id, event)}
+                              />
+                            </label>
+                            {uploadingId === item.id && <Loader2 className="h-4 w-4 animate-spin text-slate-500" />}
                           </div>
+                          {uploadError && <p className="mt-2 text-xs font-semibold text-red-600">{uploadError}</p>}
                         </div>
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              );
-            })}
-            {checklist.length === 0 && (
-              <tr>
-                <td colSpan={3} className="px-6 py-10 text-center text-sm text-slate-400">
-                  No checklist items assigned yet. Your application will generate documents once it reaches the Compliance Phase.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            );
+          })}
+        </tbody>
+      </table>
     </section>
   );
 }

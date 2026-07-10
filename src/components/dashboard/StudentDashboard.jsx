@@ -42,6 +42,7 @@ import {
   applyToProgram,
   getStudentApplications,
   getUniversityProgramsList,
+  clearApplicationCache,
 } from '../../api/students';
 import { bulkUploadDocuments } from '../../api/client';
 import { documentTypeLabel, advisoryBadgeMeta, LANGUAGE_CHOICES, Badge } from './shared/DashboardUI';
@@ -351,29 +352,40 @@ function ComplianceVault({ onChecklistChange }) {
   const [isBulkUploading, setIsBulkUploading] = useState(false);
   const [bulkUploadError, setBulkUploadError] = useState(null);
   const fileInputRef = useRef(null);
+  const [isFetching, setIsFetching] = useState(false);
 
   const fetchChecklist = useCallback(async () => {
+    // Prevent multiple simultaneous requests
+    if (isFetching) return;
+    
+    setIsFetching(true);
     setIsLoading(true);
     setError(null);
     try {
       const response = await getDocumentChecklist();
-      // Ensure we always have an array
       const data = Array.isArray(response.data) ? response.data : [];
       setChecklist(data);
       if (onChecklistChange) onChecklistChange(data);
     } catch (err) {
       console.error('Failed to fetch checklist:', err);
-      setError('Could not load checklist. Please refresh.');
-      setChecklist([]);
-      if (onChecklistChange) onChecklistChange([]);
+      // Don't show error for 429 - just use empty data
+      if (err.response?.status === 429) {
+        setChecklist([]);
+        if (onChecklistChange) onChecklistChange([]);
+      } else {
+        setError('Could not load checklist. Please refresh.');
+        setChecklist([]);
+        if (onChecklistChange) onChecklistChange([]);
+      }
     } finally {
       setIsLoading(false);
+      setIsFetching(false);
     }
-  }, [onChecklistChange]);
+  }, [onChecklistChange, isFetching]);
 
   useEffect(() => {
     fetchChecklist();
-  }, [fetchChecklist]);
+  }, []);
 
   function toggleRow(documentId) {
     setExpandedId((prev) => (prev === documentId ? null : documentId));
@@ -705,6 +717,7 @@ function UniversityCatalog({ existingApplications, onApplied }) {
     setApplyError(null);
     try {
       await applyToUniversity(universityId);
+      clearApplicationCache();
       if (onApplied) await onApplied();
     } catch (err) {
       const responseData = err?.response?.data;
@@ -724,6 +737,7 @@ function UniversityCatalog({ existingApplications, onApplied }) {
     setApplyError(null);
     try {
       await applyToProgram(universityId, programId);
+      clearApplicationCache();
       if (onApplied) await onApplied();
       const programs = await getUniversityProgramsList(universityId);
       setProgramsCache((prev) => ({ ...prev, [universityId]: { status: 'ready', programs: programs || [] } }));

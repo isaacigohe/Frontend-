@@ -17,19 +17,43 @@ import {
 } from './client';
 import { normalizeList } from './utils';
 
+// ── Simple cache for applications ──────────────────────────────────────────
+let applicationsCache = null;
+let cacheTimestamp = 0;
+const CACHE_TTL = 5000; // 5 seconds
+
 // ── Get student profile ──────────────────────────────────────────────────────
 export function getStudentProfile() {
   return getMyProfile();
 }
 
 // ── Get ALL applications for the logged-in student ─────────────────────────
-export async function getStudentApplications() {
-  const response = await getApplications();
-  const list = Array.isArray(response.data) ? response.data : response.data.results ?? [];
-  return list;
+export async function getStudentApplications(forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && applicationsCache && (now - cacheTimestamp) < CACHE_TTL) {
+    return applicationsCache;
+  }
+  try {
+    const response = await getApplications();
+    const list = Array.isArray(response.data) ? response.data : response.data.results ?? [];
+    applicationsCache = list;
+    cacheTimestamp = now;
+    return list;
+  } catch (error) {
+    // If we have cached data, return it even if expired
+    if (applicationsCache) {
+      return applicationsCache;
+    }
+    throw error;
+  }
 }
 
-// ── Get application progress (first application - used by dashboard header) ─
+export function clearApplicationCache() {
+  applicationsCache = null;
+  cacheTimestamp = 0;
+}
+
+// ── Get application progress ─────────────────────────────────────────────────
 export async function getApplicationProgress() {
   const applications = await getStudentApplications();
   const firstApp = applications[0] || null;
@@ -67,6 +91,7 @@ export async function applyToProgram(universityId, programId) {
   const createResponse = await createApplication(payload);
   const applicationId = createResponse.data.id;
   const submitResponse = await submitApplication(applicationId);
+  clearApplicationCache(); // Clear cache after creating
   return submitResponse.data ?? createResponse.data;
 }
 
@@ -79,22 +104,22 @@ export async function applyToUniversity(universityId) {
   const createResponse = await createApplication(payload);
   const applicationId = createResponse.data.id;
   const submitResponse = await submitApplication(applicationId);
+  clearApplicationCache(); // Clear cache after creating
   return submitResponse.data ?? createResponse.data;
 }
 
 // ── Document checklist ──────────────────────────────────────────────────────
 export async function getDocumentChecklist() {
-  const applications = await getStudentApplications();
-  // Find the active application (any status that has documents)
-  const activeApp = applications.find((app) => 
-    app.status === 'COMPLIANCE_PHASE' || 
-    app.status === 'UNDER_REVIEW' ||
-    app.status === 'SUBMITTED'
-  );
-  if (!activeApp) return { data: [] };
   try {
+    const applications = await getStudentApplications();
+    // Find the active application
+    const activeApp = applications.find((app) => 
+      app.status === 'COMPLIANCE_PHASE' || 
+      app.status === 'UNDER_REVIEW' ||
+      app.status === 'SUBMITTED'
+    );
+    if (!activeApp) return { data: [] };
     const response = await getDocumentChecklistRaw(activeApp.id);
-    // Ensure we always return an array
     const data = Array.isArray(response.data) ? response.data : response.data?.results || [];
     return { data: data };
   } catch (error) {

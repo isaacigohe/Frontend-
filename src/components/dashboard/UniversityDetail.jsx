@@ -27,7 +27,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { getUniversityDetail, getUniversityPrograms } from '../../api/public';
-import { advisoryBadgeMeta, degreeLevelLabel, Badge } from './shared/DashboardUI';
+import { advisoryBadgeMeta, degreeLevelLabel, Badge, LoadingRow, EmptyState } from './shared/DashboardUI';
 
 const PROGRAMS_PER_PAGE = 10;
 
@@ -72,6 +72,7 @@ export default function UniversityDetail() {
       setPrograms(response.data || []);
       setProgramsCount(response.count || 0);
     } catch (err) {
+      console.error('Failed to fetch programs:', err);
       setPrograms([]);
       setProgramsCount(0);
     } finally {
@@ -91,6 +92,7 @@ export default function UniversityDetail() {
 
   const totalPages = Math.max(1, Math.ceil(programsCount / PROGRAMS_PER_PAGE));
 
+  // ── Loading State ──────────────────────────────────────────────────────────
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center gap-2 bg-canvas text-sm text-slate-500">
@@ -100,6 +102,7 @@ export default function UniversityDetail() {
     );
   }
 
+  // ── Error State ──────────────────────────────────────────────────────────
   if (error || !university) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-canvas text-center">
@@ -148,7 +151,7 @@ export default function UniversityDetail() {
 
       {/* ── Main Content ────────────────────────────────────────────────────── */}
       <div className="mx-auto max-w-6xl space-y-8 px-6 py-10">
-        {/* Quick Facts */}
+        {/* ── Quick Facts ────────────────────────────────────────────────── */}
         <div className="flex flex-wrap gap-3">
           <span className="flex items-center gap-1 border border-slate-300 px-3 py-1 text-xs font-semibold uppercase text-slate-600">
             <Languages className="h-3.5 w-3.5" />
@@ -195,7 +198,7 @@ export default function UniversityDetail() {
           {isProgramsLoading ? (
             <LoadingRow label="Loading programs…" />
           ) : programs.length === 0 ? (
-            <p className="text-sm text-slate-400">No published programs for this university yet.</p>
+            <EmptyState label="No published programs for this university yet." />
           ) : (
             <>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

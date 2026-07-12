@@ -18,16 +18,16 @@ export async function getPublicUniversities(params) {
   }
 }
 
-export async function getUniversityPrograms(universityId) {
+export async function getUniversityPrograms(universityId, params = {}) {
   try {
-    const response = await getUniversityProgramsRaw(universityId);
+    const response = await getUniversityProgramsRaw(universityId, params);
     // Handle both array and paginated responses
     const data = Array.isArray(response.data) ? response.data : response.data.results || [];
-    return { data: data };
+    const count = response.data.count || data.length;
+    return { data: data, count: count };
   } catch (error) {
     console.error(`Failed to fetch programs for university ${universityId}:`, error);
-    // Return empty array instead of throwing to prevent UI crash
-    return { data: [] };
+    return { data: [], count: 0 };
   }
 }
 

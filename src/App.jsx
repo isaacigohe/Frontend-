@@ -10,6 +10,7 @@ import StudentDashboard from './components/dashboard/StudentDashboard';
 import AdminReviewDesk from './components/dashboard/AdminReviewDesk';
 import HostCoordinatorDashboard from './components/dashboard/HostCoordinatorDashboard';
 import ExploreCatalog from './components/dashboard/ExploreCatalog';
+import UniversityDetail from './components/dashboard/UniversityDetail';
 
 import LoginPage from './pages/auth/LoginPage';
 import RegisterPage from './pages/auth/RegisterPage';
@@ -54,6 +55,9 @@ export default function App() {
               </DashboardLayout>
             </ProtectedRoute>
           } />
+
+          {/* University Detail Page — PUBLIC */}
+          <Route path="/universities/:id" element={<UniversityDetail />} />
 
           {/* Catch-all safely brings broken links or manual path mistakes back to the Explore page */}
           <Route path="*" element={<Navigate to="/" replace />} />

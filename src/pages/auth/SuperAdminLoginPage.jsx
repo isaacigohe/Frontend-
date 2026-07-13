@@ -1,17 +1,16 @@
-// src/pages/auth/LoginPage.jsx
-// Clean login page with side panel and soft colors
+// src/pages/auth/SuperAdminLoginPage.jsx
+// Super Admin login with side panel
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { AlertTriangle, Loader2, Eye, EyeOff, GraduationCap, LogIn } from 'lucide-react';
+import { AlertTriangle, Loader2, Eye, EyeOff, Shield, GraduationCap } from 'lucide-react';
 
-export default function LoginPage() {
+export default function SuperAdminLoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
@@ -23,22 +22,16 @@ export default function LoginPage() {
     try {
       const user = await login(email, password);
       
-      if (user.role === 'SUPER_ADMIN') {
-        navigate('/super-admin');
-      } else if (user.role === 'HOME_ADMIN') {
-        navigate('/admin');
-      } else if (user.role === 'HOST_COORD') {
-        navigate('/coordinator');
-      } else if (user.role === 'STUDENT') {
-        navigate('/student');
-      } else {
-        navigate('/');
+      if (user.role !== 'SUPER_ADMIN') {
+        setError('Access denied. This page is only for Super Administrators.');
+        setIsLoading(false);
+        return;
       }
+      
+      navigate('/super-admin');
     } catch (err) {
       const responseData = err?.response?.data;
-      if (responseData?.requires_verification) {
-        setError('Your account is pending verification by a Super Admin.');
-      } else if (responseData?.detail) {
+      if (responseData?.detail) {
         setError(responseData.detail);
       } else {
         setError('Invalid email or password. Please try again.');
@@ -54,12 +47,12 @@ export default function LoginPage() {
       <div className="hidden lg:flex lg:w-1/2 items-center justify-center bg-gradient-to-br from-navy-900 to-navy-800 p-12">
         <div className="max-w-sm text-center text-white">
           <div className="mb-6 inline-flex h-16 w-16 items-center justify-center rounded-full bg-gold-500/10 border border-gold-500/20">
-            <GraduationCap className="h-8 w-8 text-gold-400" />
+            <Shield className="h-8 w-8 text-gold-400" />
           </div>
-          <h2 className="text-2xl font-bold text-white">Study Abroad, Backed by Trust</h2>
+          <h2 className="text-2xl font-bold text-white">Super Admin Access</h2>
           <p className="mt-3 text-sm text-navy-300 leading-relaxed">
-            GlobalScholar connects students to partner universities worldwide. 
-            Apply, track, and manage your exchange journey — all in one place.
+            Secure administrative portal for system oversight. 
+            Verify and manage administrator accounts.
           </p>
           <div className="mt-6 flex items-center justify-center gap-2">
             <div className="h-0.5 w-10 rounded-full bg-gold-500" />
@@ -67,7 +60,7 @@ export default function LoginPage() {
             <div className="h-0.5 w-10 rounded-full bg-navy-700" />
           </div>
           <p className="mt-4 text-xs text-navy-400 italic">
-            "A seamless platform for international education."
+            "Authorized personnel only."
           </p>
         </div>
       </div>
@@ -78,12 +71,12 @@ export default function LoginPage() {
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-4">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-navy-900">
-                <GraduationCap className="h-5 w-5 text-gold-500" />
+                <Shield className="h-5 w-5 text-gold-500" />
               </div>
-              <span className="text-lg font-bold text-navy-900">GlobalScholar</span>
+              <span className="text-lg font-bold text-navy-900">Super Admin</span>
             </div>
-            <h1 className="text-2xl font-bold text-navy-900">Welcome back</h1>
-            <p className="text-sm text-slate-500">Sign in to continue your journey</p>
+            <h1 className="text-2xl font-bold text-navy-900">Secure Access</h1>
+            <p className="text-sm text-slate-500">Administrator verification required</p>
           </div>
 
           {error && (
@@ -95,24 +88,19 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700">Email</label>
+              <label className="block text-sm font-medium text-slate-700">Email Address</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                placeholder="alex.jordan@gmail.com"
+                placeholder="superadmin@globalscholar.com"
                 className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-gold-500 focus:outline-none focus:ring-2 focus:ring-gold-500/20 transition-all"
               />
             </div>
 
             <div>
-              <div className="flex items-center justify-between">
-                <label className="block text-sm font-medium text-slate-700">Password</label>
-                <button type="button" className="text-xs text-slate-500 hover:text-navy-700 transition-colors">
-                  Forgot password?
-                </button>
-              </div>
+              <label className="block text-sm font-medium text-slate-700">Password</label>
               <div className="relative mt-1">
                 <input
                   type={showPassword ? 'text' : 'password'}
@@ -132,46 +120,22 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <div className="flex items-center">
-              <label className="flex items-center gap-2 text-sm text-slate-600">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-navy-900 focus:ring-gold-500"
-                />
-                Remember me
-              </label>
-            </div>
-
             <button
               type="submit"
               disabled={isLoading}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-navy-900 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-navy-800 hover:shadow-md disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-gold-500 px-4 py-2.5 text-sm font-semibold text-navy-900 transition-all hover:bg-gold-600 hover:shadow-md disabled:opacity-50"
             >
               {isLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <>
-                  <LogIn className="h-4 w-4" />
-                  Log in
-                </>
+                'Sign In as Super Admin'
               )}
             </button>
           </form>
 
           <div className="mt-5 text-center">
-            <p className="text-sm text-slate-500">
-              Don't have an account?{' '}
-              <Link to="/register" className="font-semibold text-navy-700 hover:text-gold-600 transition-colors">
-                Sign up
-              </Link>
-            </p>
-          </div>
-
-          <div className="mt-3 text-center">
-            <Link to="/super-admin-login" className="text-xs text-slate-400 hover:text-navy-600 transition-colors">
-              Super Admin Access
+            <Link to="/login" className="text-sm text-slate-500 hover:text-navy-700 transition-colors">
+              ← Regular user login
             </Link>
           </div>
         </div>

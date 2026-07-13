@@ -1,8 +1,7 @@
 // =============================================================================
 // HostCoordinatorDashboard.jsx
 // -----------------------------------------------------------------------------
-// Host Coordinator Dashboard - Simplified version
-// Shows ALL applications if no university assigned, or filtered if assigned.
+// Host Coordinator Dashboard - Shows only applications for their assigned university.
 // =============================================================================
 
 import { useState, useEffect, useCallback, Fragment } from 'react';
@@ -23,6 +22,7 @@ import {
   Plus,
   X,
   Search,
+  Building2,
 } from 'lucide-react';
 import { CustomDropdown, Badge, EmptyState, LoadingRow, documentTypeLabel } from './shared/DashboardUI';
 import {
@@ -392,6 +392,20 @@ export default function HostCoordinatorDashboard() {
   const [actionError, setActionError] = useState(null);
   const [activeRejectGate, setActiveRejectGate] = useState(null);
   const [isSubmittingReject, setIsSubmittingReject] = useState(false);
+  const [hostUniversity, setHostUniversity] = useState(null);
+
+  // ── Get the host university from stored user ──────────────────────────────
+  useEffect(() => {
+    const storedUser = localStorage.getItem('gs_user');
+    if (storedUser) {
+      try {
+        const user = JSON.parse(storedUser);
+        setHostUniversity(user.host_university_name || 'your university');
+      } catch (e) {
+        setHostUniversity('your university');
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const timeoutId = setTimeout(() => setSearchQuery(searchInput), 400);
@@ -492,10 +506,12 @@ export default function HostCoordinatorDashboard() {
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-wrap items-center justify-between gap-4 border border-slate-200 bg-white shadow-sm rounded-none p-6">
           <div className="flex items-center gap-2">
-            <Users className="h-5 w-5 text-slate-500" />
+            <Building2 className="h-5 w-5 text-slate-500" />
             <div>
               <h1 className="text-lg font-bold text-slate-900">Host Coordinator Dashboard</h1>
-              <p className="text-xs text-slate-500">Manage applications for your university</p>
+              <p className="text-xs text-slate-500">
+                Manage applications for <span className="font-semibold text-gold-600">{hostUniversity || 'your university'}</span>
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -524,7 +540,7 @@ export default function HostCoordinatorDashboard() {
           {isLoading ? (
             <LoadingRow label="Loading applications…" />
           ) : applications.length === 0 ? (
-            <EmptyState label="No applications available." />
+            <EmptyState label="No applications available for your university." />
           ) : (
             <table className="w-full border-collapse text-left text-sm">
               <thead>

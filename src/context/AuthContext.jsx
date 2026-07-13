@@ -1,6 +1,4 @@
 // src/context/AuthContext.jsx
-// Global authentication state.
-
 import { createContext, useContext, useState, useEffect } from 'react';
 import { loginUser, logoutUser, registerUser, TOKEN_KEYS } from '../api/client';
 
@@ -15,12 +13,6 @@ export function AuthProvider({ children }) {
     const storedAccess = localStorage.getItem(TOKEN_KEYS.ACCESS);
     const storedRefresh = localStorage.getItem(TOKEN_KEYS.REFRESH);
     
-    console.log('🔍 AuthProvider init:', {
-      hasUser: !!storedUser,
-      hasAccess: !!storedAccess,
-      hasRefresh: !!storedRefresh
-    });
-    
     if (storedUser && storedAccess) {
       try {
         setUser(JSON.parse(storedUser));
@@ -33,17 +25,11 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
-  // ── LOGIN ──────────────────────────────────────────────────────────────
   const login = async (email, password) => {
     const response = await loginUser(email, password);
     const { access, refresh } = response.data;
     
-    console.log('🔑 Tokens received:', { 
-      hasAccess: !!access, 
-      hasRefresh: !!refresh 
-    });
-    
-    // Store tokens FIRST
+    // Store tokens
     localStorage.setItem(TOKEN_KEYS.ACCESS, access);
     localStorage.setItem(TOKEN_KEYS.REFRESH, refresh);
     
@@ -56,22 +42,20 @@ export function AuthProvider({ children }) {
       full_name: userData.full_name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim(),
       first_name: userData.first_name || '',
       last_name: userData.last_name || '',
+      is_verified: userData.is_verified || false,
     };
-    
-    console.log('👤 User info stored:', userInfo);
     
     localStorage.setItem(TOKEN_KEYS.USER, JSON.stringify(userInfo));
     setUser(userInfo);
+    
     return userInfo;
   };
 
-  // ── REGISTER ────────────────────────────────────────────────────────────
   const register = async (formData) => {
     await registerUser(formData);
     return await login(formData.email, formData.password);
   };
 
-  // ── LOGOUT ─────────────────────────────────────────────────────────────
   const logout = async () => {
     const refresh = localStorage.getItem(TOKEN_KEYS.REFRESH);
     if (refresh) {
@@ -85,7 +69,6 @@ export function AuthProvider({ children }) {
     localStorage.removeItem(TOKEN_KEYS.REFRESH);
     localStorage.removeItem(TOKEN_KEYS.USER);
     setUser(null);
-    console.log('👋 User logged out');
   };
 
   return (

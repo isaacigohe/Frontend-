@@ -1,426 +1,443 @@
 // src/pages/auth/RegisterPage.jsx
-// Registration page with role selector and student-type toggle.
-
-import { useState } from 'react';
+// Clean registration with side panel and 2-column layout
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import {
-  GraduationCap, AlertCircle, Loader2, CheckCircle,
-  School, BookOpen, Info,
+import { getUniversities } from '../../api/client';
+import { 
+  AlertTriangle, Loader2, Eye, EyeOff, GraduationCap, 
+  Building2, User, School, Lock, UserPlus, ChevronRight
 } from 'lucide-react';
 
-// Three account roles — map directly to backend User.Role choices
-const ROLES = [
-  { value: 'STUDENT', label: 'Student', desc: 'Apply for exchange programs' },
-  { value: 'HOME_ADMIN', label: 'Home Administrator', desc: 'Review and approve applications' },
-  { value: 'HOST_COORD', label: 'Host Coordinator', desc: 'Manage credit transfers' },
-];
-
-// Student sub-type toggle — map to backend User.StudentType choices.
-const STUDENT_TYPES = [
-  {
-    value: 'UNDERGRADUATE',
-    label: 'University Exchange Student',
-    icon: BookOpen,
-    desc: 'Currently enrolled at a university — GPA and major required',
-  },
-  {
-    value: 'HIGH_SCHOOL',
-    label: 'High School Applicant',
-    icon: School,
-    desc: 'Exploring study-abroad options — diploma and references instead of GPA',
-  },
-];
-
 export default function RegisterPage() {
-  const { register } = useAuth();
-  const navigate = useNavigate();
-
-  const [form, setForm] = useState({
+  const [formData, setFormData] = useState({
     email: '',
+    password: '',
+    confirmPassword: '',
     first_name: '',
     last_name: '',
     role: 'STUDENT',
+    host_university: '',
     student_type: 'UNDERGRADUATE',
-    password: '',
-    password_confirm: '',
     gpa: '',
     major: '',
     home_institution: '',
     enrollment_year: '',
   });
+  const [universities, setUniversities] = useState([]);
+  const [isLoadingUniversities, setIsLoadingUniversities] = useState(false);
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const { register } = useAuth();
+  const navigate = useNavigate();
 
-  const [errors, setErrors] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [apiError, setApiError] = useState('');
-  const [success, setSuccess] = useState(false);
-
-  const isStudent = form.role === 'STUDENT';
-  const isHighSchool = form.student_type === 'HIGH_SCHOOL';
-  const isUniversityStudent = isStudent && !isHighSchool;
+  useEffect(() => {
+    if (formData.role === 'HOST_COORD') {
+      setIsLoadingUniversities(true);
+      getUniversities({ page: 1, page_size: 100 })
+        .then((response) => {
+          const data = response.data.results || response.data || [];
+          setUniversities(data);
+        })
+        .catch(() => setUniversities([]))
+        .finally(() => setIsLoadingUniversities(false));
+    }
+  }, [formData.role]);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-    if (errors[name]) setErrors((prev) => ({ ...prev, [name]: '' }));
-  };
-
-  // Client-side validation
-  const validate = () => {
-    const e = {};
-    if (!form.email) e.email = 'Email is required.';
-    if (!form.first_name) e.first_name = 'First name is required.';
-    if (!form.last_name) e.last_name = 'Last name is required.';
-    if (!form.password) e.password = 'Password is required.';
-    if (form.password.length < 8) e.password = 'Minimum 8 characters.';
-    if (form.password !== form.password_confirm)
-      e.password_confirm = 'Passwords do not match.';
-
-    if (isUniversityStudent) {
-      if (!form.gpa) e.gpa = 'GPA is required for university exchange students.';
-      if (form.gpa && (parseFloat(form.gpa) < 0 || parseFloat(form.gpa) > 4.0))
-        e.gpa = 'GPA must be between 0.00 and 4.00.';
-      if (!form.major) e.major = 'Major is required for university exchange students.';
-      if (!form.home_institution) e.home_institution = 'Home institution is required.';
-    }
-    return e;
+    const { name, value, type, checked } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value,
+    }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setApiError('');
+    setError('');
 
-    const validationErrors = validate();
-    if (Object.keys(validationErrors).length > 0) {
-      setErrors(validationErrors);
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match.');
       return;
     }
 
-    setLoading(true);
-
-    // Build payload
-    const payload = {
-      email: form.email,
-      first_name: form.first_name,
-      last_name: form.last_name,
-      role: form.role,
-      password: form.password,
-    };
-
-    // Add student fields
-    if (isStudent) {
-      payload.student_type = form.student_type;
-      payload.home_institution = form.home_institution || '';
-      if (isUniversityStudent) {
-        payload.gpa = parseFloat(form.gpa);
-        payload.major = form.major;
-        payload.enrollment_year = form.enrollment_year ? parseInt(form.enrollment_year) : null;
-      }
+    if (formData.role === 'HOST_COORD' && !formData.host_university) {
+      setError('Please select the university you represent.');
+      return;
     }
 
-    try {
-      const user = await register(payload);
-      setSuccess(true);
+    setIsLoading(true);
 
-      // Route to the correct dashboard
-      if (user.role === 'STUDENT') navigate('/student');
-      else if (user.role === 'HOME_ADMIN') navigate('/admin');
-      else if (user.role === 'HOST_COORD') navigate('/coordinator');
-      else navigate('/');
+    try {
+      const payload = {
+        email: formData.email,
+        password: formData.password,
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        role: formData.role,
+        host_university: formData.host_university || null,
+        student_type: formData.student_type,
+        gpa: formData.gpa || null,
+        major: formData.major || null,
+        home_institution: formData.home_institution || null,
+        enrollment_year: formData.enrollment_year || null,
+      };
+
+      await register(payload);
+      navigate('/login');
     } catch (err) {
-      const data = err?.response?.data;
-      if (data && typeof data === 'object') {
-        const fieldErrors = {};
-        Object.keys(data).forEach((key) => {
-          if (Array.isArray(data[key])) {
-            fieldErrors[key] = data[key][0];
-          } else {
-            fieldErrors[key] = data[key];
-          }
-        });
-        setErrors(fieldErrors);
-        setApiError('Please fix the errors below.');
+      const responseData = err?.response?.data;
+      if (typeof responseData === 'object') {
+        const firstKey = Object.keys(responseData)[0];
+        setError(responseData[firstKey]?.[0] || 'Registration failed. Please try again.');
       } else {
-        setApiError('Registration failed. Please try again.');
+        setError('Registration failed. Please check your information.');
       }
-      setLoading(false);
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  const isUniversity = ['UNDERGRADUATE', 'POSTGRADUATE'].includes(formData.student_type);
+  const isHighSchool = formData.student_type === 'HIGH_SCHOOL';
+  const isIndependent = formData.student_type === 'INDEPENDENT';
+
   return (
-    <div className="min-h-screen bg-surface-50 flex items-center justify-center p-6">
-      <div className="w-full max-w-lg">
-
-        <div className="flex items-center gap-2.5 mb-8">
-          <GraduationCap className="text-navy-600" size={26} />
-          <div>
-            <h1 className="text-lg font-semibold text-ink-900">GlobalScholar</h1>
-            <p className="text-xs text-ink-500">Create your institutional account</p>
+    <div className="flex min-h-screen">
+      {/* ── Left Panel: Hero ───────────────────────────────────────────────── */}
+      <div className="hidden lg:flex lg:w-2/5 items-center justify-center bg-gradient-to-br from-navy-900 to-navy-800 p-8">
+        <div className="max-w-xs text-center text-white">
+          <div className="mb-6 inline-flex h-14 w-14 items-center justify-center rounded-full bg-gold-500/10 border border-gold-500/20">
+            <GraduationCap className="h-7 w-7 text-gold-400" />
+          </div>
+          <h2 className="text-xl font-bold text-white">Start Your Exchange Journey</h2>
+          <p className="mt-2 text-sm text-navy-300 leading-relaxed">
+            Join thousands of students who have found their perfect study abroad 
+            program through GlobalScholar.
+          </p>
+          <div className="mt-4 flex items-center justify-center gap-2">
+            <div className="h-0.5 w-8 rounded-full bg-gold-500" />
+            <div className="h-0.5 w-12 rounded-full bg-navy-600" />
+            <div className="h-0.5 w-8 rounded-full bg-navy-700" />
+          </div>
+          <div className="mt-4 space-y-1.5 text-left">
+            <div className="flex items-center gap-2 text-xs text-navy-300">
+              <ChevronRight className="h-3 w-3 text-gold-500" />
+              Apply to partner universities
+            </div>
+            <div className="flex items-center gap-2 text-xs text-navy-300">
+              <ChevronRight className="h-3 w-3 text-gold-500" />
+              Track your application in real-time
+            </div>
+            <div className="flex items-center gap-2 text-xs text-navy-300">
+              <ChevronRight className="h-3 w-3 text-gold-500" />
+              Connect with host coordinators
+            </div>
           </div>
         </div>
+      </div>
 
-        <div className="bg-white border border-surface-200 rounded shadow-sm">
-          <div className="px-5 py-3.5 border-b border-surface-200 flex items-center justify-between">
-            <span className="text-sm font-semibold text-ink-900 uppercase tracking-wide">Account Registration</span>
+      {/* ── Right Panel: Registration Form ────────────────────────────────── */}
+      <div className="flex w-full items-center justify-center bg-white px-6 py-6 lg:w-3/5">
+        <div className="w-full max-w-lg">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-navy-900">
+              <GraduationCap className="h-5 w-5 text-gold-500" />
+            </div>
+            <span className="text-lg font-bold text-navy-900">GlobalScholar</span>
           </div>
 
-          <div className="px-5 py-4">
-            {apiError && (
-              <div className="flex items-start gap-3 p-3.5 bg-crimson-50 border border-crimson-100 rounded text-sm text-crimson-700 mb-5">
-                <AlertCircle size={15} className="shrink-0 mt-0.5" />
-                <span>{apiError}</span>
-              </div>
-            )}
+          <div className="mb-4">
+            <h1 className="text-xl font-bold text-navy-900">Create your account</h1>
+            <p className="text-sm text-slate-500">Join the GlobalScholar network</p>
+          </div>
 
-            {success && (
-              <div className="flex items-start gap-3 p-3.5 bg-emerald-50 border border-emerald-200 rounded text-sm text-emerald-700 mb-5">
-                <CheckCircle size={15} className="shrink-0 mt-0.5" />
-                <span>Account created successfully! Redirecting to your dashboard...</span>
-              </div>
-            )}
+          {error && (
+            <div className="mb-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-red-500" />
+              <span>{error}</span>
+            </div>
+          )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-
-              {/* Role selector */}
+          <form onSubmit={handleSubmit} className="space-y-3">
+            {/* ── Row 1: Name ──────────────────────────────────────────────── */}
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">Account type</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {ROLES.map((r) => (
-                    <button
-                      key={r.value}
-                      type="button"
-                      onClick={() => setForm((prev) => ({ ...prev, role: r.value }))}
-                      className={`text-left p-3 border text-xs transition-colors rounded-none ${
-                        form.role === r.value
-                          ? 'border-navy-500 bg-navy-50 text-navy-700'
-                          : 'border-surface-300 bg-white text-ink-700 hover:border-surface-300'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-semibold">{r.label}</span>
-                        {form.role === r.value && <CheckCircle size={12} className="text-navy-500" />}
-                      </div>
-                      <span className="text-ink-500">{r.desc}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Student category toggle */}
-              {isStudent && (
-                <div>
-                  <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">Student category</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {STUDENT_TYPES.map((t) => {
-                      const Icon = t.icon;
-                      const active = form.student_type === t.value;
-                      return (
-                        <button
-                          key={t.value}
-                          type="button"
-                          onClick={() => setForm((prev) => ({ ...prev, student_type: t.value }))}
-                          className={`text-left p-3 border text-xs transition-colors rounded-none ${
-                            active
-                              ? 'border-navy-500 bg-navy-50 text-navy-700'
-                              : 'border-surface-300 bg-white text-ink-700 hover:border-surface-300'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 mb-1">
-                            <Icon size={14} className={active ? 'text-navy-600' : 'text-ink-400'} />
-                            <span className="font-semibold">{t.label}</span>
-                          </div>
-                          <span className="text-ink-500">{t.desc}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Name row */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">First name</label>
-                  <input
-                    name="first_name"
-                    value={form.first_name}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 bg-white border border-surface-300 rounded text-sm text-ink-900 focus:border-gold-500 focus:outline-none"
-                    placeholder="Ada"
-                  />
-                  {errors.first_name && <p className="text-xs text-crimson-600 mt-1">{errors.first_name}</p>}
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">Last name</label>
-                  <input
-                    name="last_name"
-                    value={form.last_name}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 bg-white border border-surface-300 rounded text-sm text-ink-900 focus:border-gold-500 focus:outline-none"
-                    placeholder="Lovelace"
-                  />
-                  {errors.last_name && <p className="text-xs text-crimson-600 mt-1">{errors.last_name}</p>}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">Email</label>
+                <label className="block text-xs font-medium text-slate-700">First Name</label>
                 <input
-                  type="email"
-                  name="email"
-                  value={form.email}
+                  type="text"
+                  name="first_name"
+                  value={formData.first_name}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 bg-white border border-surface-300 rounded text-sm text-ink-900 focus:border-gold-500 focus:outline-none"
-                  placeholder="you@institution.edu"
+                  required
+                  placeholder="Alex"
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-gold-500 focus:outline-none focus:ring-2 focus:ring-gold-500/20 transition-all"
                 />
-                {errors.email && <p className="text-xs text-crimson-600 mt-1">{errors.email}</p>}
               </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700">Last Name</label>
+                <input
+                  type="text"
+                  name="last_name"
+                  value={formData.last_name}
+                  onChange={handleChange}
+                  required
+                  placeholder="Jordan"
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-gold-500 focus:outline-none focus:ring-2 focus:ring-gold-500/20 transition-all"
+                />
+              </div>
+            </div>
 
-              {/* University Student Fields */}
-              {isUniversityStudent && (
-                <>
-                  <div className="border-t border-surface-200 my-4" />
-                  <p className="text-xs font-medium text-ink-500 uppercase tracking-wide">Academic information</p>
+            {/* ── Email ────────────────────────────────────────────────────── */}
+            <div>
+              <label className="block text-xs font-medium text-slate-700">Email</label>
+              <input
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                required
+                placeholder="alex.jordan@gmail.com"
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-gold-500 focus:outline-none focus:ring-2 focus:ring-gold-500/20 transition-all"
+              />
+            </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">Current GPA (0.00–4.00)</label>
-                      <input
-                        type="number"
-                        name="gpa"
-                        value={form.gpa}
-                        onChange={handleChange}
-                        step="0.01"
-                        min="0"
-                        max="4"
-                        className="w-full px-3 py-2 bg-white border border-surface-300 rounded text-sm text-ink-900 focus:border-gold-500 focus:outline-none"
-                        placeholder="3.80"
-                      />
-                      {errors.gpa && <p className="text-xs text-crimson-600 mt-1">{errors.gpa}</p>}
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">Enrollment year</label>
-                      <input
-                        type="number"
-                        name="enrollment_year"
-                        value={form.enrollment_year}
-                        onChange={handleChange}
-                        className="w-full px-3 py-2 bg-white border border-surface-300 rounded text-sm text-ink-900 focus:border-gold-500 focus:outline-none"
-                        placeholder="2022"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">Declared major</label>
-                    <input
-                      name="major"
-                      value={form.major}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 bg-white border border-surface-300 rounded text-sm text-ink-900 focus:border-gold-500 focus:outline-none"
-                      placeholder="Computer Science"
-                    />
-                    {errors.major && <p className="text-xs text-crimson-600 mt-1">{errors.major}</p>}
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">Home institution</label>
-                    <input
-                      name="home_institution"
-                      value={form.home_institution}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 bg-white border border-surface-300 rounded text-sm text-ink-900 focus:border-gold-500 focus:outline-none"
-                      placeholder="University of Nairobi"
-                    />
-                    {errors.home_institution && <p className="text-xs text-crimson-600 mt-1">{errors.home_institution}</p>}
-                    <div className="flex items-start gap-3 p-3 mt-2 bg-navy-50 border border-navy-200 rounded text-sm text-navy-700">
-                      <Info size={14} className="shrink-0 mt-0.5" />
-                      <span>
-                        Your home institution does not need to be registered with GlobalScholar — type it freely. Only your{' '}
-                        <strong>destination</strong> university must exist in our catalog for you to apply.
-                      </span>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* High School Applicant Notice */}
-              {isHighSchool && (
-                <>
-                  <div className="border-t border-surface-200 my-4" />
-                  <div className="flex items-start gap-3 p-3 bg-navy-50 border border-navy-200 rounded text-sm text-navy-700">
-                    <School size={14} className="shrink-0 mt-0.5" />
-                    <span>
-                      No GPA or major needed. After registering you can browse universities freely. When you apply, your
-                      application is flagged for manual review.
-                    </span>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">Current school (optional)</label>
-                    <input
-                      name="home_institution"
-                      value={form.home_institution}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 bg-white border border-surface-300 rounded text-sm text-ink-900 focus:border-gold-500 focus:outline-none"
-                      placeholder="Nairobi School"
-                    />
-                  </div>
-                </>
-              )}
-
-              <div className="border-t border-surface-200 my-4" />
-
-              {/* Password */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">Password</label>
+            {/* ── Row 2: Password ──────────────────────────────────────────── */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-700">Password</label>
+                <div className="relative mt-1">
                   <input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     name="password"
-                    value={form.password}
+                    value={formData.password}
                     onChange={handleChange}
-                    className="w-full px-3 py-2 bg-white border border-surface-300 rounded text-sm text-ink-900 focus:border-gold-500 focus:outline-none"
-                    placeholder="Min. 8 characters"
+                    required
+                    minLength="8"
+                    placeholder="Min 8 chars"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-gold-500 focus:outline-none focus:ring-2 focus:ring-gold-500/20 pr-9 transition-all"
                   />
-                  {errors.password && <p className="text-xs text-crimson-600 mt-1">{errors.password}</p>}
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">Confirm password</label>
-                  <input
-                    type="password"
-                    name="password_confirm"
-                    value={form.password_confirm}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 bg-white border border-surface-300 rounded text-sm text-ink-900 focus:border-gold-500 focus:outline-none"
-                    placeholder="Repeat password"
-                  />
-                  {errors.password_confirm && <p className="text-xs text-crimson-600 mt-1">{errors.password_confirm}</p>}
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
                 </div>
               </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700">Confirm Password</label>
+                <div className="relative mt-1">
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    name="confirmPassword"
+                    value={formData.confirmPassword}
+                    onChange={handleChange}
+                    required
+                    placeholder="Confirm"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-gold-500 focus:outline-none focus:ring-2 focus:ring-gold-500/20 pr-9 transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+            </div>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="inline-flex items-center justify-center gap-2 w-full px-4 py-2 bg-navy-800 hover:bg-navy-900 text-white text-sm font-medium rounded border border-transparent transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+            {/* ── Role ──────────────────────────────────────────────────────── */}
+            <div>
+              <label className="block text-xs font-medium text-slate-700">Register as</label>
+              <select
+                name="role"
+                value={formData.role}
+                onChange={handleChange}
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-gold-500 focus:outline-none focus:ring-2 focus:ring-gold-500/20 transition-all"
               >
-                {loading ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" /> Creating account...
-                  </>
-                ) : (
-                  'Create account'
-                )}
-              </button>
-            </form>
+                <option value="STUDENT">Student</option>
+                <option value="HOME_ADMIN">Home Admin</option>
+                <option value="HOST_COORD">Host Coordinator</option>
+              </select>
+              <p className="mt-0.5 text-[10px] text-slate-400">
+                {formData.role === 'HOST_COORD' && 'Select the university you represent.'}
+                {formData.role === 'HOME_ADMIN' && 'Requires verification by Super Admin.'}
+                {formData.role === 'STUDENT' && 'Automatically verified.'}
+              </p>
+            </div>
+
+            {/* ── Host Coordinator ────────────────────────────────────────── */}
+            {formData.role === 'HOST_COORD' && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <label className="block text-xs font-medium text-amber-800">
+                  <Building2 className="inline h-3.5 w-3.5 mr-1" />
+                  University <span className="text-red-500">*</span>
+                </label>
+                <select
+                  name="host_university"
+                  value={formData.host_university}
+                  onChange={handleChange}
+                  required
+                  className="mt-1 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-gold-500 focus:outline-none focus:ring-2 focus:ring-gold-500/20 transition-all"
+                  disabled={isLoadingUniversities}
+                >
+                  <option value="">
+                    {isLoadingUniversities ? 'Loading...' : 'Select a university...'}
+                  </option>
+                  {universities.map((uni) => (
+                    <option key={uni.id} value={uni.id}>
+                      {uni.name} ({uni.country})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* ── Student Information ──────────────────────────────────────── */}
+            {formData.role === 'STUDENT' && (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <h3 className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 mb-2">
+                  <School className="h-3.5 w-3.5" />
+                  Student Information
+                </h3>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700">Student Type</label>
+                    <select
+                      name="student_type"
+                      value={formData.student_type}
+                      onChange={handleChange}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800 focus:border-gold-500 focus:outline-none focus:ring-2 focus:ring-gold-500/20 transition-all"
+                    >
+                      <option value="UNDERGRADUATE">Undergraduate</option>
+                      <option value="POSTGRADUATE">Postgraduate</option>
+                      <option value="HIGH_SCHOOL">High School</option>
+                      <option value="INDEPENDENT">Independent</option>
+                    </select>
+                  </div>
+
+                  {isUniversity && (
+                    <>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-700">GPA</label>
+                        <input
+                          type="number"
+                          name="gpa"
+                          value={formData.gpa}
+                          onChange={handleChange}
+                          step="0.01"
+                          min="0"
+                          max="4"
+                          placeholder="3.50"
+                          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-gold-500 focus:outline-none focus:ring-2 focus:ring-gold-500/20 transition-all"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-700">Major</label>
+                        <input
+                          type="text"
+                          name="major"
+                          value={formData.major}
+                          onChange={handleChange}
+                          placeholder="CS"
+                          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-gold-500 focus:outline-none focus:ring-2 focus:ring-gold-500/20 transition-all"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-700">Home Institution</label>
+                        <input
+                          type="text"
+                          name="home_institution"
+                          value={formData.home_institution}
+                          onChange={handleChange}
+                          placeholder="University name"
+                          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-gold-500 focus:outline-none focus:ring-2 focus:ring-gold-500/20 transition-all"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-700">Enrollment Year</label>
+                        <input
+                          type="number"
+                          name="enrollment_year"
+                          value={formData.enrollment_year}
+                          onChange={handleChange}
+                          placeholder="2024"
+                          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-gold-500 focus:outline-none focus:ring-2 focus:ring-gold-500/20 transition-all"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {isHighSchool && (
+                    <>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-700">High School Name</label>
+                        <input
+                          type="text"
+                          name="home_institution"
+                          value={formData.home_institution}
+                          onChange={handleChange}
+                          placeholder="High school name"
+                          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-gold-500 focus:outline-none focus:ring-2 focus:ring-gold-500/20 transition-all"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-700">Graduation Year</label>
+                        <input
+                          type="number"
+                          name="enrollment_year"
+                          value={formData.enrollment_year}
+                          onChange={handleChange}
+                          placeholder="2025"
+                          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-gold-500 focus:outline-none focus:ring-2 focus:ring-gold-500/20 transition-all"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {isIndependent && (
+                    <div className="col-span-2 rounded-lg border border-purple-200 bg-purple-50 p-2 text-center">
+                      <p className="text-xs text-purple-700">
+                        🌱 No GPA, major, or institution details required.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── Submit ────────────────────────────────────────────────────── */}
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-navy-900 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-navy-800 hover:shadow-md disabled:opacity-50"
+            >
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  <UserPlus className="h-4 w-4" />
+                  Create Account
+                </>
+              )}
+            </button>
+          </form>
+
+          <div className="mt-3 text-center">
+            <p className="text-sm text-slate-500">
+              Already have an account?{' '}
+              <Link to="/login" className="font-semibold text-navy-700 hover:text-gold-600 transition-colors">
+                Sign in
+              </Link>
+            </p>
           </div>
         </div>
-
-        <p className="text-xs text-ink-500 text-center mt-5">
-          Already have an account?{' '}
-          <Link to="/login" className="text-navy-600 font-medium hover:underline">
-            Sign in
-          </Link>
-        </p>
       </div>
     </div>
   );

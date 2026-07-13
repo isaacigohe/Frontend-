@@ -8,11 +8,13 @@ import DashboardLayout from './components/layout/DashboardLayout';
 import StudentDashboard from './components/dashboard/StudentDashboard';
 import AdminReviewDesk from './components/dashboard/AdminReviewDesk';
 import HostCoordinatorDashboard from './components/dashboard/HostCoordinatorDashboard';
-import SuperAdminDashboard from './components/dashboard/SuperAdminDashboard'; // <-- ADD THIS
+import SuperAdminDashboard from './components/dashboard/SuperAdminDashboard';
 import ExploreCatalog from './components/dashboard/ExploreCatalog';
 import UniversityDetail from './components/dashboard/UniversityDetail';
 
+// Auth Pages
 import LoginPage from './pages/auth/LoginPage';
+import SuperAdminLoginPage from './pages/auth/SuperAdminLoginPage'; // <-- NEW
 import RegisterPage from './pages/auth/RegisterPage';
 import UnauthorizedPage from './pages/UnauthorizedPage';
 
@@ -24,6 +26,7 @@ export default function App() {
           {/* Public Routes */}
           <Route path="/" element={<ExploreCatalog />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/super-admin-login" element={<SuperAdminLoginPage />} /> {/* <-- NEW */}
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/unauthorized" element={<UnauthorizedPage />} />
           <Route path="/universities/:id" element={<UniversityDetail />} />

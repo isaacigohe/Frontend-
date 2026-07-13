@@ -30,7 +30,7 @@ import {
   Upload,
   Building2,
   ExternalLink,
-  FileText,  // <-- ADDED
+  FileText,
 } from 'lucide-react';
 import {
   getStudentProfile,
@@ -699,7 +699,12 @@ function UniversityCatalog({ existingApplications, onApplied }) {
     setProgramsCache((prev) => ({ ...prev, [universityId]: { status: 'loading' } }));
     try {
       const programs = await getUniversityProgramsList(universityId);
-      setProgramsCache((prev) => ({ ...prev, [universityId]: { status: 'ready', programs: programs || [] } }));
+      // FIX: Handle both array and paginated responses
+      const programData = Array.isArray(programs) ? programs : programs.results || [];
+      setProgramsCache((prev) => ({ 
+        ...prev, 
+        [universityId]: { status: 'ready', programs: programData || [] } 
+      }));
     } catch (err) {
       console.error('Failed to fetch programs:', err);
       setProgramsCache((prev) => ({ ...prev, [universityId]: { status: 'error' } }));
@@ -734,7 +739,11 @@ function UniversityCatalog({ existingApplications, onApplied }) {
       clearApplicationCache();
       if (onApplied) await onApplied();
       const programs = await getUniversityProgramsList(universityId);
-      setProgramsCache((prev) => ({ ...prev, [universityId]: { status: 'ready', programs: programs || [] } }));
+      const programData = Array.isArray(programs) ? programs : programs.results || [];
+      setProgramsCache((prev) => ({ 
+        ...prev, 
+        [universityId]: { status: 'ready', programs: programData || [] } 
+      }));
     } catch (err) {
       const responseData = err?.response?.data;
       let message = 'Could not apply to this program.';

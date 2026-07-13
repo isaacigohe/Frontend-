@@ -77,8 +77,15 @@ export async function getUniversities(params) {
 
 // ── Get programs for a specific university ──────────────────────────────────
 export async function getUniversityProgramsList(universityId) {
-  const response = await getUniversityPrograms(universityId);
-  return response.data;
+  try {
+    const response = await getUniversityPrograms(universityId);
+    // Handle both array and paginated responses
+    const data = Array.isArray(response.data) ? response.data : response.data.results || [];
+    return data;
+  } catch (error) {
+    console.error(`Failed to fetch programs for university ${universityId}:`, error);
+    return [];
+  }
 }
 
 // ── Create application for a specific program ───────────────────────────────

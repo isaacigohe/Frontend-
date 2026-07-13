@@ -43,39 +43,90 @@ apiClient.interceptors.request.use(
 );
 
 // ── RESPONSE INTERCEPTOR ───────────────────────────────────────────────────
+// Track if we're already refreshing to avoid multiple refresh requests
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-
-      const refreshToken = localStorage.getItem(TOKEN_KEYS.REFRESH);
-      if (refreshToken) {
-        try {
-          const refreshResponse = await axios.post(`${BASE_URL}/auth/token/refresh/`, { refresh: refreshToken });
-          if (refreshResponse?.status === 200) {
-            const newAccessToken = refreshResponse.data.access;
-            localStorage.setItem(TOKEN_KEYS.ACCESS, newAccessToken);
-            originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
-            return apiClient(originalRequest);
-          }
-        } catch (refreshError) {
-          localStorage.removeItem(TOKEN_KEYS.ACCESS);
-          localStorage.removeItem(TOKEN_KEYS.REFRESH);
-          localStorage.removeItem(TOKEN_KEYS.USER);
-          window.location.href = '/login';
-        }
-      } else {
-        localStorage.removeItem(TOKEN_KEYS.ACCESS);
-        localStorage.removeItem(TOKEN_KEYS.REFRESH);
-        localStorage.removeItem(TOKEN_KEYS.USER);
-        window.location.href = '/login';
-      }
+    // If it's not a 401 or already retried, reject
+    if (error.response?.status !== 401 || originalRequest._retry) {
+      return Promise.reject(error);
     }
 
-    return Promise.reject(error);
+    // Don't try to refresh if it's the refresh endpoint itself
+    if (originalRequest.url?.includes('/auth/token/refresh/')) {
+      return Promise.reject(error);
+    }
+
+    // If we're already refreshing, queue this request
+    if (isRefreshing) {
+      return new Promise((resolve, reject) => {
+        failedQueue.push({ resolve, reject });
+      })
+        .then(token => {
+          originalRequest.headers['Authorization'] = `Bearer ${token}`;
+          return apiClient(originalRequest);
+        })
+        .catch(err => Promise.reject(err));
+    }
+
+    originalRequest._retry = true;
+    isRefreshing = true;
+
+    const refreshToken = localStorage.getItem(TOKEN_KEYS.REFRESH);
+
+    if (!refreshToken) {
+      // No refresh token - redirect to login
+      isRefreshing = false;
+      localStorage.removeItem(TOKEN_KEYS.ACCESS);
+      localStorage.removeItem(TOKEN_KEYS.REFRESH);
+      localStorage.removeItem(TOKEN_KEYS.USER);
+      window.location.href = '/login';
+      return Promise.reject(error);
+    }
+
+    try {
+      const refreshResponse = await axios.post(`${BASE_URL}/auth/token/refresh/`, { refresh: refreshToken });
+
+      if (refreshResponse?.status === 200) {
+        const newAccessToken = refreshResponse.data.access;
+        localStorage.setItem(TOKEN_KEYS.ACCESS, newAccessToken);
+        
+        // Process any queued requests
+        processQueue(null, newAccessToken);
+        
+        // Retry the original request with new token
+        originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
+        return apiClient(originalRequest);
+      } else {
+        throw new Error('Refresh failed');
+      }
+    } catch (refreshError) {
+      // Refresh failed - clear tokens and redirect to login
+      processQueue(refreshError, null);
+      localStorage.removeItem(TOKEN_KEYS.ACCESS);
+      localStorage.removeItem(TOKEN_KEYS.REFRESH);
+      localStorage.removeItem(TOKEN_KEYS.USER);
+      window.location.href = '/login';
+      return Promise.reject(refreshError);
+    } finally {
+      isRefreshing = false;
+    }
   }
 );
 

@@ -250,3 +250,19 @@ export default function Header() {
     </header>
   );
 }
+// Add a refresh token button
+const refreshSession = async () => {
+  try {
+    const refreshToken = localStorage.getItem(TOKEN_KEYS.REFRESH);
+    if (refreshToken) {
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/auth/token/refresh/`, {
+        refresh: refreshToken
+      });
+      localStorage.setItem(TOKEN_KEYS.ACCESS, response.data.access);
+      alert('Session refreshed successfully!');
+    }
+  } catch (error) {
+    alert('Session expired. Please log in again.');
+    logout();
+  }
+};

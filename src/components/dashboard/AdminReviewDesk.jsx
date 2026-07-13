@@ -132,7 +132,13 @@ function ReasonGate({ label, confirmLabel, tone, onConfirm, onCancel, isSubmitti
       <div className="mt-2 flex items-center justify-between">
         {!isValid && <span className="text-[11px] font-medium text-slate-500">A description is required to submit.</span>}
         <div className="ml-auto flex gap-2">
-          <button type="button" onClick={onCancel} className="border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-600 rounded-none hover:border-slate-400">Cancel</button>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-600 rounded-none hover:border-slate-400"
+          >
+            Cancel
+          </button>
           <button
             type="button"
             disabled={!isValid || isSubmitting}
@@ -451,6 +457,7 @@ function ProgramForm({ universityId, program, onClose, onSuccess }) {
     tuition_per_semester_usd: program?.tuition_per_semester_usd || '',
     credits_transferable: program?.credits_transferable !== undefined ? program.credits_transferable : true,
     application_deadline: program?.application_deadline || '',
+    description: program?.description || '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -477,14 +484,19 @@ function ProgramForm({ universityId, program, onClose, onSuccess }) {
     setError(null);
 
     try {
+      // ── Build payload with ALL required fields ──────────────────────────
       const payload = {
+        university: universityId,
         name: formData.name.trim(),
         degree_level: formData.degree_level,
         duration_semesters: parseInt(formData.duration_semesters),
         tuition_per_semester_usd: formData.tuition_per_semester_usd ? parseFloat(formData.tuition_per_semester_usd) : null,
-        credits_transferable: formData.credits_transferable,
+        credits_transferable: formData.credits_transferable === true || formData.credits_transferable === 'true',
         application_deadline: formData.application_deadline || null,
+        description: formData.description ? formData.description.trim() : '',
       };
+
+      console.log('📤 Sending payload:', payload);
 
       if (program) {
         await updateProgram(program.id, payload);
@@ -494,8 +506,24 @@ function ProgramForm({ universityId, program, onClose, onSuccess }) {
       onSuccess();
       onClose();
     } catch (err) {
+      console.error('❌ Program save error:', err);
+      
+      // ── Show detailed error ─────────────────────────────────────────────
       const responseData = err?.response?.data;
-      if (typeof responseData === 'object') {
+      const status = err?.response?.status;
+      
+      if (status === 401) {
+        setError('Your session has expired. Please log out and log back in.');
+      } else if (status === 400) {
+        if (typeof responseData === 'object') {
+          const errors = Object.entries(responseData)
+            .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`)
+            .join('; ');
+          setError(`Validation error: ${errors}`);
+        } else {
+          setError('Invalid data. Please check all fields.');
+        }
+      } else if (typeof responseData === 'object') {
         const firstKey = Object.keys(responseData)[0];
         setError(responseData[firstKey]?.[0] || 'Could not save program.');
       } else {
@@ -524,8 +552,11 @@ function ProgramForm({ universityId, program, onClose, onSuccess }) {
       )}
 
       <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {/* Program Name */}
         <div className="sm:col-span-2">
-          <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">Program Name <span className="text-red-600">*</span></label>
+          <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
+            Program Name <span className="text-red-600">*</span>
+          </label>
           <input
             type="text"
             name="name"
@@ -537,8 +568,11 @@ function ProgramForm({ universityId, program, onClose, onSuccess }) {
           />
         </div>
 
+        {/* Degree Level */}
         <div>
-          <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">Degree Level <span className="text-red-600">*</span></label>
+          <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
+            Degree Level <span className="text-red-600">*</span>
+          </label>
           <select
             name="degree_level"
             value={formData.degree_level}
@@ -551,8 +585,11 @@ function ProgramForm({ universityId, program, onClose, onSuccess }) {
           </select>
         </div>
 
+        {/* Duration */}
         <div>
-          <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">Duration (Semesters) <span className="text-red-600">*</span></label>
+          <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
+            Duration (Semesters) <span className="text-red-600">*</span>
+          </label>
           <input
             type="number"
             name="duration_semesters"
@@ -565,8 +602,11 @@ function ProgramForm({ universityId, program, onClose, onSuccess }) {
           />
         </div>
 
+        {/* Tuition */}
         <div>
-          <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">Tuition (USD/Semester)</label>
+          <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
+            Tuition (USD/Semester)
+          </label>
           <input
             type="number"
             name="tuition_per_semester_usd"
@@ -579,8 +619,11 @@ function ProgramForm({ universityId, program, onClose, onSuccess }) {
           />
         </div>
 
+        {/* Deadline */}
         <div>
-          <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">Application Deadline</label>
+          <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
+            Application Deadline
+          </label>
           <input
             type="date"
             name="application_deadline"
@@ -590,6 +633,7 @@ function ProgramForm({ universityId, program, onClose, onSuccess }) {
           />
         </div>
 
+        {/* Credits Transferable */}
         <div className="flex items-center">
           <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
             <input
@@ -602,11 +646,38 @@ function ProgramForm({ universityId, program, onClose, onSuccess }) {
           </label>
         </div>
 
+        {/* ── DESCRIPTION / BENEFITS ────────────────────────────────────────── */}
+        <div className="sm:col-span-2">
+          <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
+            Program Description / Benefits <span className="text-slate-400">(recommended)</span>
+          </label>
+          <textarea
+            name="description"
+            value={formData.description}
+            onChange={handleChange}
+            rows="4"
+            placeholder="Describe what this program offers, what students will learn, career opportunities, benefits, etc."
+            className="w-full resize-y border border-slate-300 px-3 py-2 text-sm rounded-none focus:border-gold-500 focus:outline-none"
+          />
+          <p className="mt-1 text-[10px] text-slate-400">
+            Adding a description helps students understand the program benefits. (Optional but recommended)
+          </p>
+        </div>
+
+        {/* Buttons */}
         <div className="sm:col-span-2 flex justify-end gap-2 mt-2">
-          <button type="button" onClick={onClose} className="border border-slate-300 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 rounded-none hover:border-slate-400">
+          <button
+            type="button"
+            onClick={onClose}
+            className="border border-slate-300 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 rounded-none hover:border-slate-400"
+          >
             Cancel
           </button>
-          <button type="submit" disabled={isSubmitting} className="flex items-center gap-1.5 border border-slate-800 bg-slate-800 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white rounded-none hover:bg-slate-900 disabled:opacity-50">
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="flex items-center gap-1.5 border border-slate-800 bg-slate-800 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white rounded-none hover:bg-slate-900 disabled:opacity-50"
+          >
             {isSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
             {program ? 'Update Program' : 'Add Program'}
           </button>
@@ -762,7 +833,7 @@ function ProgramList({ universityId, onRefresh }) {
   );
 }
 
-// ── RegisterUniversityPanel (UPDATED with Program Management) ──────────────
+// ── RegisterUniversityPanel ────────────────────────────────────────────────
 function RegisterUniversityPanel({ isOpen, onClose, onRegistered }) {
   const [formValues, setFormValues] = useState({
     name: '',
@@ -817,7 +888,6 @@ function RegisterUniversityPanel({ isOpen, onClose, onRegistered }) {
         minimum_language_score: '',
       });
       if (onRegistered) onRegistered();
-      // Don't close the panel - show the program management section instead
     } catch (err) {
       const responseData = err?.response?.data;
       const firstKey = responseData && typeof responseData === 'object' ? Object.keys(responseData)[0] : null;
@@ -837,7 +907,6 @@ function RegisterUniversityPanel({ isOpen, onClose, onRegistered }) {
         <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">Register New University</h2>
       </div>
 
-      {/* Registration Form */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <input
           value={formValues.name}
@@ -931,7 +1000,6 @@ function RegisterUniversityPanel({ isOpen, onClose, onRegistered }) {
         </button>
       </div>
 
-      {/* Show Program Management after registration */}
       {registeredUniversityId && (
         <div className="mt-6 border-t border-slate-200 pt-4">
           <div className="flex items-center gap-2 mb-2">
@@ -1050,7 +1118,7 @@ export default function AdminReviewDesk() {
   const [selectedId, setSelectedId] = useState(null);
   const [queueRefreshToken, setQueueRefreshToken] = useState(0);
   const [isRegisterPanelOpen, setIsRegisterPanelOpen] = useState(false);
-  const [viewMode, setViewMode] = useState('review'); // 'review' | 'programs'
+  const [viewMode, setViewMode] = useState('review');
 
   return (
     <div className="bg-slate-100 p-6 pb-6">

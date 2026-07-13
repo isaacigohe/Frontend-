@@ -12,6 +12,7 @@ import {
   Search,
   ShieldCheck,
   CheckCircle2,
+  XCircle,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -45,15 +46,17 @@ import {
   getUniversityProgramsList,
   clearApplicationCache,
 } from '../../api/students';
-import { bulkUploadDocuments } from '../../api/client';
+import { bulkUploadDocuments, getNotifications, markNotificationRead } from '../../api/client';
 import { documentTypeLabel, advisoryBadgeMeta, LANGUAGE_CHOICES, Badge } from './shared/DashboardUI';
+import NotificationPopup from '../NotificationPopup';
 
 // ── STATIC CONFIG ──────────────────────────────────────────────────────────────
+// UPDATED: Removed COMPLIANCE_PHASE, added HOST_REVIEW
 const PIPELINE_STAGES = [
   { key: 'DRAFT', label: 'Draft', icon: FileEdit },
   { key: 'SUBMITTED', label: 'Submitted', icon: Send },
   { key: 'UNDER_REVIEW', label: 'Under Review', icon: Search },
-  { key: 'COMPLIANCE_PHASE', label: 'Compliance Phase', icon: ShieldCheck },
+  { key: 'HOST_REVIEW', label: 'Host Review', icon: ShieldCheck },
   { key: 'APPROVED', label: 'Approved', icon: CheckCircle2 },
 ];
 
@@ -65,8 +68,8 @@ function toneForStatus(status) {
   switch (status) {
     case 'APPROVED': return 'emerald';
     case 'REJECTED': return 'red';
+    case 'HOST_REVIEW': return 'gold';
     case 'UNDER_REVIEW': return 'amber';
-    case 'COMPLIANCE_PHASE': return 'orange';
     case 'SUBMITTED': return 'navy';
     default: return 'slate';
   }
@@ -76,15 +79,14 @@ function toneForStatus(status) {
 function StatusBanner({ status, hasPendingDocuments, applicationCount }) {
   const statusMap = {
     DRAFT: { label: 'Draft', color: 'bg-slate-100 border-slate-300 text-slate-700', text: 'Your application is in draft mode. Complete and submit when ready.' },
-    SUBMITTED: { label: 'Submitted', color: 'bg-navy-50 border-navy-200 text-navy-700', text: 'Your application has been submitted and is awaiting review.' },
-    UNDER_REVIEW: { label: 'Under Review', color: 'bg-amber-50 border-amber-200 text-amber-700', text: 'Your application is currently being reviewed by the admin.' },
-    COMPLIANCE_PHASE: { label: 'Compliance Phase', color: 'bg-gold-50 border-gold-300 text-navy-900', text: 'Your application has reached the compliance phase. Please upload all required documents below.' },
+    SUBMITTED: { label: 'Submitted', color: 'bg-navy-50 border-navy-200 text-navy-700', text: 'Your application has been submitted and is awaiting review by the Home Admin.' },
+    UNDER_REVIEW: { label: 'Under Review', color: 'bg-amber-50 border-amber-200 text-amber-700', text: 'Your application is being reviewed by the Home Admin.' },
+    HOST_REVIEW: { label: 'Host Review', color: 'bg-gold-50 border-gold-300 text-navy-900', text: 'Your application has been forwarded to the Host Coordinator for final review.' },
     APPROVED: { label: 'Approved', color: 'bg-emerald-50 border-emerald-200 text-emerald-700', text: 'Congratulations! Your application has been approved.' },
     REJECTED: { label: 'Rejected', color: 'bg-crimson-50 border-crimson-200 text-crimson-700', text: 'Your application has been rejected. Please review the reason provided.' },
   };
 
   const info = statusMap[status] || statusMap.DRAFT;
-  const isCompliance = status === 'COMPLIANCE_PHASE';
 
   return (
     <div className={`border p-4 rounded-none ${info.color}`}>
@@ -97,9 +99,9 @@ function StatusBanner({ status, hasPendingDocuments, applicationCount }) {
             <p className="text-xs mt-1 text-slate-600">You have {applicationCount} total applications.</p>
           )}
         </div>
-        {isCompliance && hasPendingDocuments && (
-          <span className="border border-red-500 bg-red-50 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-red-700">
-            Action Required
+        {status === 'HOST_REVIEW' && (
+          <span className="border border-gold-500 bg-gold-50 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-gold-700">
+            ⏳ Host Review
           </span>
         )}
       </div>
@@ -449,11 +451,6 @@ function ComplianceVault({ onChecklistChange }) {
 
   const total = checklist.length;
   const hasDocuments = total > 0;
-  const isInCompliancePhase = checklist.some((item) =>
-    item.verification_status === 'PENDING' ||
-    item.verification_status === 'AWAITING_REVIEW' ||
-    item.verification_status === 'ACTION_REQUIRED'
-  );
 
   if (error) {
     return (
@@ -504,7 +501,7 @@ function ComplianceVault({ onChecklistChange }) {
           </div>
           <p>No checklist items assigned yet.</p>
           <p className="mt-1 text-xs text-slate-400">
-            Your application will generate documents once it reaches the Compliance Phase.
+            Your application will generate documents once it reaches the review stage.
           </p>
         </div>
       </section>
@@ -518,35 +515,31 @@ function ComplianceVault({ onChecklistChange }) {
           <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">Compliance Checklist Vault</h2>
           <p className="mt-1 text-xs text-slate-500">Required documentation for your active application</p>
         </div>
-        {hasDocuments && isInCompliancePhase && (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isBulkUploading}
-              className="flex items-center gap-1.5 border border-slate-800 bg-slate-800 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white rounded-none hover:bg-slate-900 disabled:opacity-50"
-            >
-              {isBulkUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-              Upload All Documents
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              className="hidden"
-              disabled={isBulkUploading}
-              onChange={handleBulkUpload}
-              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-            />
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isBulkUploading}
+            className="flex items-center gap-1.5 border border-slate-800 bg-slate-800 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white rounded-none hover:bg-slate-900 disabled:opacity-50"
+          >
+            {isBulkUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+            Upload All Documents
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            disabled={isBulkUploading}
+            onChange={handleBulkUpload}
+            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+          />
+        </div>
       </div>
 
-      {hasDocuments && isInCompliancePhase && (
-        <div className="px-6 pt-4">
-          <DocumentSummary checklist={checklist} />
-        </div>
-      )}
+      <div className="px-6 pt-4">
+        <DocumentSummary checklist={checklist} />
+      </div>
 
       {bulkUploadError && (
         <div className="mx-6 mt-3 flex items-center gap-2 border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 rounded-none">
@@ -699,7 +692,6 @@ function UniversityCatalog({ existingApplications, onApplied }) {
     setProgramsCache((prev) => ({ ...prev, [universityId]: { status: 'loading' } }));
     try {
       const programs = await getUniversityProgramsList(universityId);
-      // FIX: Handle both array and paginated responses
       const programData = Array.isArray(programs) ? programs : programs.results || [];
       setProgramsCache((prev) => ({ 
         ...prev, 
@@ -988,6 +980,26 @@ export default function StudentDashboard() {
   const [isTogglingHighSchool, setIsTogglingHighSchool] = useState(false);
   const [checklist, setChecklist] = useState([]);
   const [hasActionRequiredItems, setHasActionRequiredItems] = useState(false);
+  const [notification, setNotification] = useState(null);
+  const [showNotification, setShowNotification] = useState(false);
+
+  // ── Check for notifications on load ──────────────────────────────────────
+  const checkNotifications = useCallback(async () => {
+    try {
+      const response = await getNotifications();
+      const unread = response.data.results?.filter(n => !n.is_read) || [];
+      if (unread.length > 0) {
+        // Get the most recent unread notification
+        const latest = unread[0];
+        setNotification(latest);
+        setShowNotification(true);
+        // Mark as read after showing
+        await markNotificationRead(latest.id);
+      }
+    } catch (error) {
+      // Silently fail - notifications are non-critical
+    }
+  }, []);
 
   const loadInitialData = useCallback(async () => {
     setIsProfileLoading(true);
@@ -1011,7 +1023,10 @@ export default function StudentDashboard() {
     }
 
     setIsProfileLoading(false);
-  }, []);
+
+    // Check for notifications after loading initial data
+    await checkNotifications();
+  }, [checkNotifications]);
 
   useEffect(() => {
     loadInitialData();
@@ -1095,6 +1110,14 @@ export default function StudentDashboard() {
           </div>
         )}
       </div>
+
+      {/* ── Notification Popup ────────────────────────────────────────────── */}
+      {showNotification && notification && (
+        <NotificationPopup 
+          notification={notification} 
+          onClose={() => setShowNotification(false)} 
+        />
+      )}
     </div>
   );
 }

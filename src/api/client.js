@@ -11,6 +11,7 @@ export const TOKEN_KEYS = {
   USER:    'gs_user',
 };
 
+// ── Create axios instance ─────────────────────────────────────────────────────
 const apiClient = axios.create({
   baseURL: BASE_URL,
   headers: { 'Content-Type': 'application/json' },
@@ -43,7 +44,6 @@ apiClient.interceptors.request.use(
 );
 
 // ── RESPONSE INTERCEPTOR ───────────────────────────────────────────────────
-// Track if we're already refreshing to avoid multiple refresh requests
 let isRefreshing = false;
 let failedQueue = [];
 
@@ -63,17 +63,14 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // If it's not a 401 or already retried, reject
     if (error.response?.status !== 401 || originalRequest._retry) {
       return Promise.reject(error);
     }
 
-    // Don't try to refresh if it's the refresh endpoint itself
     if (originalRequest.url?.includes('/auth/token/refresh/')) {
       return Promise.reject(error);
     }
 
-    // If we're already refreshing, queue this request
     if (isRefreshing) {
       return new Promise((resolve, reject) => {
         failedQueue.push({ resolve, reject });
@@ -91,7 +88,6 @@ apiClient.interceptors.response.use(
     const refreshToken = localStorage.getItem(TOKEN_KEYS.REFRESH);
 
     if (!refreshToken) {
-      // No refresh token - redirect to login
       isRefreshing = false;
       localStorage.removeItem(TOKEN_KEYS.ACCESS);
       localStorage.removeItem(TOKEN_KEYS.REFRESH);
@@ -107,17 +103,14 @@ apiClient.interceptors.response.use(
         const newAccessToken = refreshResponse.data.access;
         localStorage.setItem(TOKEN_KEYS.ACCESS, newAccessToken);
         
-        // Process any queued requests
         processQueue(null, newAccessToken);
         
-        // Retry the original request with new token
         originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
         return apiClient(originalRequest);
       } else {
         throw new Error('Refresh failed');
       }
     } catch (refreshError) {
-      // Refresh failed - clear tokens and redirect to login
       processQueue(refreshError, null);
       localStorage.removeItem(TOKEN_KEYS.ACCESS);
       localStorage.removeItem(TOKEN_KEYS.REFRESH);
@@ -165,8 +158,8 @@ export const submitApplication = (id) => apiClient.post(`/applications/${id}/sub
 export const advanceApplication = (id, data) => apiClient.post(`/applications/${id}/advance/`, data);
 
 // ── Approve/Reject ───────────────────────────────────────────────────────
-export const approveApplication = (id) => apiClient.post(`/applications/${id}/approve/`);
-export const rejectApplication = (id, data) => apiClient.post(`/applications/${id}/reject/`, data);
+export const approveApplicationDirect = (id) => apiClient.post(`/applications/${id}/approve/`);
+export const rejectApplicationDirect = (id, data) => apiClient.post(`/applications/${id}/reject/`, data);
 
 // ── Documents ────────────────────────────────────────────────────────────
 export const getDocumentChecklist = (applicationId) => apiClient.get(`/applications/${applicationId}/documents/`);
@@ -206,4 +199,5 @@ export const getUnreadCount = () => apiClient.get('/notifications/unread-count/'
 export const markNotificationRead = (id) => apiClient.post(`/notifications/${id}/read/`);
 export const markAllNotificationsRead = () => apiClient.post('/notifications/mark-all-read/');
 
+// ── DEFAULT EXPORT ────────────────────────────────────────────────────────
 export default apiClient;

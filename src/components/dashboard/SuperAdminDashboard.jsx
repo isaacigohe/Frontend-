@@ -1,6 +1,4 @@
 // src/components/dashboard/SuperAdminDashboard.jsx
-// Super Admin Dashboard - Verify/Reject new admins
-
 import { useState, useEffect, useCallback } from 'react';
 import {
   ShieldCheck,

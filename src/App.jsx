@@ -6,6 +6,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import DashboardLayout from './components/layout/DashboardLayout';
 
 // Standard relative layouts
+import SuperAdminDashboard from './components/dashboard/SuperAdminDashboard';
 import StudentDashboard from './components/dashboard/StudentDashboard';
 import AdminReviewDesk from './components/dashboard/AdminReviewDesk';
 import HostCoordinatorDashboard from './components/dashboard/HostCoordinatorDashboard';
@@ -65,4 +66,12 @@ export default function App() {
       </AuthProvider>
     </BrowserRouter>
   );
+        // Add to Routes:
+<Route path="/super-admin" element={
+  <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+    <DashboardLayout>
+      <SuperAdminDashboard />
+    </DashboardLayout>
+  </ProtectedRoute>
+} />
 }

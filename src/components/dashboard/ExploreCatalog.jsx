@@ -107,7 +107,6 @@ function UniversityCard({ university }) {
     </div>
   );
 }
-
 // ── HeroSection ──────────────────────────────────────────────────────────────
 function HeroSection() {
   return (

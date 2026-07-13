@@ -83,3 +83,16 @@ export function rejectApplication(applicationId, comment) {
 export function registerUniversity(payload) {
   return createUniversity(payload);
 }
+
+// ── Super Admin API Calls ──────────────────────────────────────────────────
+export function getUnverifiedAdmins() {
+  return apiClient.get('/users/unverified-admins/');
+}
+
+export function verifyAdmin(userId) {
+  return apiClient.post(`/users/${userId}/verify/`);
+}
+
+export function rejectAdmin(userId) {
+  return apiClient.post(`/users/${userId}/reject/`);
+}

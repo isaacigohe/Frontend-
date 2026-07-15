@@ -195,36 +195,36 @@ backend/
 
 **Landing Page**
 Public, unauthenticated catalog of partner universities with search and filter functionality.
-![alt text](image-1.png-page.png)
+![Landing Page](./images/landing-page.png%20images.png)
 
 
 **Login Page**
 Secure login page with role-based redirection and Super Admin access path.
-![Login Page](./images/login-page.png)
+![Login Page](./images/login-page.png%20images.png)
 
 **Student Dashboard**
 Application pipeline tracker and pre-application catalog where students can browse and apply to universities.
-![Student Dashboard](./images/student-dashboard.png)
+![Student Dashboard](./images/student-dashboard.png%20images.png)
 
 **Admin Review Desk**
 Split-panel document inspection with applicant queue and full document verification interface.
-![Admin Review Desk](./images/admin-review-desk.png)
+![Admin Review Desk](./images/admin-review-desk.png%20images.png)
 
 **Program Management**
 Admin interface for managing university programs with add, edit, and delete functionality.
-![Program Management](./images/program-management.png)
+![Program Management](./images/program-management.png%20images.png)
 
 **University Detail Page**
 Detailed view of a university showing programs, requirements, and admissions information.
-![University Detail Page](./images/university-detail.png)
+![University Detail Page](./images/university-detail.png%20images.png)
 
 **Host Coordinator Dashboard**
 Placement tracking dashboard for managing inbound student applications.
-![Host Coordinator Dashboard](./images/host-coordinator.png)
+![Host Coordinator Dashboard](./images/host-coordinator.png%20images.png)
 
 **Super Admin Dashboard**
 System oversight dashboard for verifying and managing administrator accounts.
-![Super Admin Dashboard](./images/super-admin.png)
+![Super Admin Dashboard](./images/super-admin.png%20images.png)
 
 ---
 

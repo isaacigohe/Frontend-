@@ -195,7 +195,8 @@ backend/
 
 **Landing Page**
 Public, unauthenticated catalog of partner universities with search and filter functionality.
-![Landing Page](./images/landing-page.png)
+![alt text](image-1.png-page.png)
+
 
 **Login Page**
 Secure login page with role-based redirection and Super Admin access path.

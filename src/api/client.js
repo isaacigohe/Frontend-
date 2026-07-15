@@ -3,7 +3,18 @@
 
 import axios from 'axios';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api/v1';
+// ── FIX: Hardcode the URL for production if env variable is missing ──────
+const getBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl) return envUrl;
+  // Fallback for production
+  if (window.location.hostname !== 'localhost') {
+    return 'https://backend-system-of-globalscholar-1.onrender.com/api/v1';
+  }
+  return 'http://127.0.0.1:8000/api/v1';
+};
+
+const BASE_URL = getBaseUrl();
 
 export const TOKEN_KEYS = {
   ACCESS:  'gs_access_token',
@@ -19,9 +30,13 @@ const apiClient = axios.create({
 
 export { apiClient };
 
+// ── Log the URL being used ─────────────────────────────────────────────────
+console.log('🔗 API Base URL:', BASE_URL);
+
 // ── REQUEST INTERCEPTOR ────────────────────────────────────────────────────
 apiClient.interceptors.request.use(
   (config) => {
+    // Skip auth for public endpoints
     const publicEndpoints = [
       '/universities/',
       '/universities',
@@ -44,12 +59,13 @@ apiClient.interceptors.request.use(
       delete config.headers['Content-Type'];
     }
     
+    console.log('📤 Request:', config.method.toUpperCase(), config.url);
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// ── RESPONSE INTERCEPTOR ──────────────────────────────────────────────────
+// ── RESPONSE INTERCEPTOR WITH IMPROVED REFRESH ──────────────────────────
 let isRefreshing = false;
 let failedQueue = [];
 
@@ -65,14 +81,31 @@ const processQueue = (error, token = null) => {
 };
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log('📥 Response:', response.status, response.config.url);
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
 
+    // ── Log the error for debugging ────────────────────────────────────────
+    console.error('❌ API Error:', {
+      status: error.response?.status,
+      url: originalRequest?.url,
+      data: error.response?.data,
+    });
+
+    // Handle 404 - don't retry
+    if (error.response?.status === 404) {
+      return Promise.reject(error);
+    }
+
+    // If it's not a 401 or already retried, reject
     if (error.response?.status !== 401 || originalRequest._retry) {
       return Promise.reject(error);
     }
 
+    // Don't try to refresh if it's the refresh endpoint itself
     if (originalRequest.url?.includes('/auth/token/refresh/')) {
       localStorage.removeItem(TOKEN_KEYS.ACCESS);
       localStorage.removeItem(TOKEN_KEYS.REFRESH);
@@ -81,6 +114,7 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    // If we're already refreshing, queue this request
     if (isRefreshing) {
       return new Promise((resolve, reject) => {
         failedQueue.push({ resolve, reject });
@@ -107,13 +141,15 @@ apiClient.interceptors.response.use(
     }
 
     try {
-      console.log('Refreshing token...');
-      const refreshResponse = await axios.post(`${BASE_URL}/auth/token/refresh/`, { refresh: refreshToken });
+      console.log('🔄 Refreshing token...');
+      const refreshResponse = await axios.post(`${BASE_URL}/auth/token/refresh/`, { 
+        refresh: refreshToken 
+      });
 
       if (refreshResponse?.status === 200) {
         const newAccessToken = refreshResponse.data.access;
         localStorage.setItem(TOKEN_KEYS.ACCESS, newAccessToken);
-        console.log('Token refreshed successfully');
+        console.log('✅ Token refreshed successfully');
         
         processQueue(null, newAccessToken);
         originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
@@ -122,7 +158,7 @@ apiClient.interceptors.response.use(
         throw new Error('Refresh failed');
       }
     } catch (refreshError) {
-      console.error('Token refresh failed:', refreshError);
+      console.error('❌ Token refresh failed:', refreshError);
       processQueue(refreshError, null);
       localStorage.removeItem(TOKEN_KEYS.ACCESS);
       localStorage.removeItem(TOKEN_KEYS.REFRESH);
@@ -151,7 +187,6 @@ export const updateMyProfile = (data) => apiClient.patch('/users/me/', data);
 export const getUniversities = (params = {}) => apiClient.get('/universities/', { params });
 export const getUniversity   = (id) => apiClient.get(`/universities/${id}/`);
 
-// Use FormData for all university updates
 export const createUniversity = (data) => {
   let payload;
   let headers = {};
@@ -173,7 +208,6 @@ export const createUniversity = (data) => {
   return apiClient.post('/universities/', payload, { headers });
 };
 
-// Always use FormData for university updates
 export const updateUniversity = (id, data) => {
   let payload;
   let headers = {};
@@ -199,6 +233,8 @@ export const updateUniversity = (id, data) => {
 export const getUniversityPrograms = (universityId) => apiClient.get(`/universities/${universityId}/programs/`);
 export const getProgram   = (id) => apiClient.get(`/programs/${id}/`);
 export const createProgram = (universityId, data) => {
+  console.log('📤 Creating program for university:', universityId);
+  console.log('📤 Payload:', data);
   return apiClient.post(`/universities/${universityId}/programs/`, data);
 };
 export const updateProgram = (id, data) => apiClient.patch(`/programs/${id}/`, data);
@@ -258,11 +294,14 @@ export const manualRefreshToken = async () => {
     throw new Error('No refresh token available');
   }
   try {
+    console.log('🔄 Manual token refresh...');
     const response = await axios.post(`${BASE_URL}/auth/token/refresh/`, { refresh: refreshToken });
     const newAccessToken = response.data.access;
     localStorage.setItem(TOKEN_KEYS.ACCESS, newAccessToken);
+    console.log('✅ Manual token refresh successful');
     return newAccessToken;
   } catch (error) {
+    console.error('❌ Manual token refresh failed:', error);
     localStorage.removeItem(TOKEN_KEYS.ACCESS);
     localStorage.removeItem(TOKEN_KEYS.REFRESH);
     localStorage.removeItem(TOKEN_KEYS.USER);

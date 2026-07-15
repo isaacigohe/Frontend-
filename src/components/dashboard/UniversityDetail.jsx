@@ -25,6 +25,7 @@ import {
   Clock,
   DollarSign,
   AlertTriangle,
+  Building2,
 } from 'lucide-react';
 import { getUniversityDetail, getUniversityPrograms } from '../../api/public';
 import { advisoryBadgeMeta, degreeLevelLabel, Badge, LoadingRow, EmptyState } from './shared/DashboardUI';
@@ -50,7 +51,6 @@ export default function UniversityDetail() {
     red: 'border-red-600 text-red-700',
   }[advisoryTone];
 
-  // ── Fetch University Detail ──────────────────────────────────────────────
   const fetchUniversity = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -58,13 +58,13 @@ export default function UniversityDetail() {
       const response = await getUniversityDetail(id);
       setUniversity(response.data);
     } catch (err) {
+      console.error('Failed to fetch university:', err);
       setError('Could not load this university. It may not exist or the server is unreachable.');
     } finally {
       setIsLoading(false);
     }
   }, [id]);
 
-  // ── Fetch Programs (Paginated) ──────────────────────────────────────────
   const fetchPrograms = useCallback(async () => {
     setIsProgramsLoading(true);
     try {
@@ -92,7 +92,6 @@ export default function UniversityDetail() {
 
   const totalPages = Math.max(1, Math.ceil(programsCount / PROGRAMS_PER_PAGE));
 
-  // ── Loading State ──────────────────────────────────────────────────────────
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center gap-2 bg-canvas text-sm text-slate-500">
@@ -102,7 +101,6 @@ export default function UniversityDetail() {
     );
   }
 
-  // ── Error State ──────────────────────────────────────────────────────────
   if (error || !university) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-canvas text-center">
@@ -115,24 +113,20 @@ export default function UniversityDetail() {
     );
   }
 
-  const hasImage = Boolean(university.image_url);
-
   return (
     <div className="min-h-screen bg-canvas">
       {/* ── Hero Banner ────────────────────────────────────────────────────── */}
-      <div className="relative h-72 overflow-hidden bg-navy-900">
-        {hasImage ? (
-          <img
-            src={university.image_url}
-            alt={university.name}
-            className="h-full w-full object-cover opacity-70"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center opacity-10">
-            <ImageIcon className="h-24 w-24 text-white" strokeWidth={1} />
-          </div>
-        )}
+      <div className="relative h-48 w-full overflow-hidden bg-navy-800">
+        <div className="flex h-full w-full items-center justify-center">
+          <span className="text-6xl font-bold text-white/20">
+            {university.name.charAt(0).toUpperCase()}
+          </span>
+        </div>
+        
+        {/* Gradient Overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-navy-950 via-navy-900/70 to-transparent" />
+        
+        {/* Back Button */}
         <Link
           to="/"
           className="absolute left-6 top-6 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-white hover:text-gold-500 transition-colors z-10"
@@ -140,6 +134,8 @@ export default function UniversityDetail() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to Catalog
         </Link>
+
+        {/* Hero Content */}
         <div className="absolute bottom-6 left-6 right-6 z-10">
           <h1 className="text-4xl font-bold uppercase tracking-tight text-white">{university.name}</h1>
           <p className="mt-1 flex items-center gap-1 text-sm text-slate-200">
@@ -150,23 +146,23 @@ export default function UniversityDetail() {
       </div>
 
       {/* ── Main Content ────────────────────────────────────────────────────── */}
-      <div className="mx-auto max-w-6xl space-y-8 px-6 py-10">
-        {/* ── Quick Facts ────────────────────────────────────────────────── */}
-        <div className="flex flex-wrap gap-3">
-          <span className="flex items-center gap-1 border border-slate-300 px-3 py-1 text-xs font-semibold uppercase text-slate-600">
+      <div className="mx-auto max-w-6xl px-6 py-6">
+        {/* ── Quick Facts Bar ────────────────────────────────────────────── */}
+        <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 pb-4 mb-6">
+          <span className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase text-slate-600">
             <Languages className="h-3.5 w-3.5" />
             {university.primary_language}
           </span>
-          <span className={`flex items-center gap-1 border px-3 py-1 text-xs font-semibold uppercase ${advisoryToneClasses}`}>
+          <span className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold uppercase ${advisoryToneClasses}`}>
             <MapPin className="h-3.5 w-3.5" />
             {advisoryLabel}
           </span>
-          <span className="flex items-center gap-1 border border-slate-300 px-3 py-1 text-xs font-semibold uppercase text-slate-600">
+          <span className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase text-slate-600">
             <GraduationCap className="h-3.5 w-3.5" />
             GPA: {university.minimum_gpa}
           </span>
           {university.max_international_students != null && (
-            <span className="flex items-center gap-1 border border-slate-300 px-3 py-1 text-xs font-semibold uppercase text-slate-600">
+            <span className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase text-slate-600">
               <Users className="h-3.5 w-3.5" />
               Cap: {university.max_international_students}/yr
             </span>
@@ -176,7 +172,7 @@ export default function UniversityDetail() {
               href={university.website}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-1 border border-navy-700 px-3 py-1 text-xs font-semibold uppercase text-navy-700 hover:bg-navy-50 transition-colors"
+              className="flex items-center gap-1.5 rounded-full border border-navy-700 bg-navy-700 px-3 py-1 text-xs font-semibold uppercase text-white transition-colors hover:bg-navy-800"
             >
               <ExternalLink className="h-3.5 w-3.5" />
               Visit Website
@@ -203,7 +199,7 @@ export default function UniversityDetail() {
             <>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 {programs.map((program) => (
-                  <div key={program.id} className="border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
+                  <div key={program.id} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
                     <div className="flex items-start justify-between">
                       <div>
                         <h3 className="text-base font-semibold text-navy-900">{program.name}</h3>
@@ -216,7 +212,6 @@ export default function UniversityDetail() {
 
                     <div className="my-3 h-px bg-slate-200" />
 
-                    {/* ── Program Details ──────────────────────────────────── */}
                     <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
                       <div className="flex items-center gap-1.5">
                         <Clock className="h-3.5 w-3.5 text-slate-400" />
@@ -234,7 +229,6 @@ export default function UniversityDetail() {
                       </div>
                     </div>
 
-                    {/* ── Description / Benefits ──────────────────────────── */}
                     {program.description && (
                       <div className="mt-3 rounded border-l-2 border-gold-400 bg-slate-50 p-3">
                         <p className="text-xs text-slate-600 leading-relaxed">{program.description}</p>
@@ -244,7 +238,6 @@ export default function UniversityDetail() {
                 ))}
               </div>
 
-              {/* ── Program Pagination ────────────────────────────────────── */}
               {totalPages > 1 && (
                 <div className="mt-6 flex items-center justify-between border-t border-slate-200 pt-4">
                   <span className="text-xs text-slate-500">
@@ -255,7 +248,7 @@ export default function UniversityDetail() {
                       type="button"
                       disabled={page <= 1}
                       onClick={() => setPage((prev) => prev - 1)}
-                      className="flex items-center gap-1 border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-700 rounded-none hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="flex items-center gap-1 rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-700 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       <ChevronLeft className="h-3.5 w-3.5" />
                       Prev
@@ -264,7 +257,7 @@ export default function UniversityDetail() {
                       type="button"
                       disabled={page >= totalPages}
                       onClick={() => setPage((prev) => prev + 1)}
-                      className="flex items-center gap-1 border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-700 rounded-none hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="flex items-center gap-1 rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-700 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       Next
                       <ChevronRight className="h-3.5 w-3.5" />
@@ -276,14 +269,16 @@ export default function UniversityDetail() {
           )}
         </section>
 
-        {/* ── CTA ──────────────────────────────────────────────────────────── */}
-        <Link
-          to="/login"
-          className="inline-flex items-center gap-2 bg-gold-500 px-6 py-3 text-xs font-bold uppercase tracking-wide text-navy-900 transition-colors hover:bg-gold-600"
-        >
-          <LogIn className="h-4 w-4" />
-          Sign In to Apply
-        </Link>
+        {/* ── Sign In to Apply ────────────────────────────────────────────── */}
+        <div className="mt-8 flex justify-start">
+          <Link
+            to="/login"
+            className="inline-flex items-center gap-2 border border-slate-800 bg-slate-800 px-6 py-3 text-xs font-bold uppercase tracking-wide text-white transition-colors hover:bg-slate-900"
+          >
+            <LogIn className="h-4 w-4" />
+            Sign In to Apply
+          </Link>
+        </div>
       </div>
     </div>
   );

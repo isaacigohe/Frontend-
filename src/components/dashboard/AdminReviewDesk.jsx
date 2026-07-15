@@ -3,6 +3,7 @@
 // -----------------------------------------------------------------------------
 // PHASE 4a — GlobalScholar Admin (HOME_ADMIN) Review Split-Panel Desk
 // WITH PROGRAM MANAGEMENT - Admins can add/edit/delete programs for any university
+// WITH UNIVERSITY EDIT - Admins can edit university details (NO IMAGE UPLOAD)
 // =============================================================================
 
 import { useState, useEffect, useCallback } from 'react';
@@ -30,6 +31,7 @@ import {
   Edit,
   Trash2,
   ChevronDown,
+  Pencil,
 } from 'lucide-react';
 import { CustomDropdown, Badge, PaginationFooter, LoadingRow, EmptyState, documentTypeLabel, LANGUAGE_CHOICES, degreeLevelLabel } from './shared/DashboardUI';
 import {
@@ -48,10 +50,12 @@ import {
   createProgram,
   updateProgram,
   deleteProgram,
+  updateUniversity,
+  manualRefreshToken,
 } from '../../api/client';
 
 const PAGE_SIZE = 10;
-const STATUS_FILTER_OPTIONS = ['All Statuses', 'SUBMITTED', 'UNDER_REVIEW', 'COMPLIANCE_PHASE', 'APPROVED', 'REJECTED'];
+const STATUS_FILTER_OPTIONS = ['All Statuses', 'SUBMITTED', 'UNDER_REVIEW', 'HOST_REVIEW', 'APPROVED', 'REJECTED'];
 
 // ── Status Summary Cards ─────────────────────────────────────────────────────
 function StatusSummary({ applications }) {
@@ -63,7 +67,7 @@ function StatusSummary({ applications }) {
   const total = applications.length;
   const submitted = counts.SUBMITTED || 0;
   const underReview = counts.UNDER_REVIEW || 0;
-  const compliance = counts.COMPLIANCE_PHASE || 0;
+  const hostReview = counts.HOST_REVIEW || 0;
   const approved = counts.APPROVED || 0;
   const rejected = counts.REJECTED || 0;
 
@@ -82,8 +86,8 @@ function StatusSummary({ applications }) {
         <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Under Review</p>
       </div>
       <div className="border border-slate-200 bg-white p-3 text-center shadow-sm rounded-none">
-        <p className="text-lg font-bold text-gold-600">{compliance}</p>
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Compliance</p>
+        <p className="text-lg font-bold text-gold-600">{hostReview}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Host Review</p>
       </div>
       <div className="border border-slate-200 bg-white p-3 text-center shadow-sm rounded-none">
         <p className="text-lg font-bold text-emerald-600">{approved}</p>
@@ -101,7 +105,7 @@ function toneForStatus(status) {
     case 'ACTION_REQUIRED': return 'red';
     case 'UNDER_REVIEW':
     case 'AWAITING_REVIEW': return 'amber';
-    case 'COMPLIANCE_PHASE': return 'orange';
+    case 'HOST_REVIEW': return 'gold';
     default: return 'slate';
   }
 }
@@ -476,40 +480,58 @@ function ProgramForm({ universityId, program, onClose, onSuccess }) {
     }));
   };
 
+  const buildPayload = () => ({
+    university: universityId,
+    name: formData.name.trim(),
+    degree_level: formData.degree_level,
+    duration_semesters: parseInt(formData.duration_semesters),
+    tuition_per_semester_usd: formData.tuition_per_semester_usd ? parseFloat(formData.tuition_per_semester_usd) : null,
+    credits_transferable: formData.credits_transferable === true || formData.credits_transferable === 'true',
+    application_deadline: formData.application_deadline || null,
+    description: formData.description ? formData.description.trim() : '',
+  });
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
     setError(null);
 
     try {
-      const payload = {
-        university: universityId,
-        name: formData.name.trim(),
-        degree_level: formData.degree_level,
-        duration_semesters: parseInt(formData.duration_semesters),
-        tuition_per_semester_usd: formData.tuition_per_semester_usd ? parseFloat(formData.tuition_per_semester_usd) : null,
-        credits_transferable: formData.credits_transferable === true || formData.credits_transferable === 'true',
-        application_deadline: formData.application_deadline || null,
-        description: formData.description ? formData.description.trim() : '',
-      };
-
-      console.log('📤 Sending payload:', payload);
+      const payload = buildPayload();
+      console.log('Sending program payload:', payload);
 
       if (program) {
         await updateProgram(program.id, payload);
       } else {
         await createProgram(universityId, payload);
       }
+      
       onSuccess();
       onClose();
     } catch (err) {
-      console.error('❌ Program save error:', err);
+      console.error('Program save error:', err);
       
       const responseData = err?.response?.data;
       const status = err?.response?.status;
       
       if (status === 401) {
-        setError('Your session has expired. Please log out and log back in.');
+        try {
+          console.log('Token expired, attempting refresh...');
+          await manualRefreshToken();
+          console.log('Token refreshed, retrying request...');
+          const payload = buildPayload();
+          if (program) {
+            await updateProgram(program.id, payload);
+          } else {
+            await createProgram(universityId, payload);
+          }
+          onSuccess();
+          onClose();
+          return;
+        } catch (refreshErr) {
+          console.error('Auto-refresh failed:', refreshErr);
+          setError('Your session expired. Please log out and log back in.');
+        }
       } else if (status === 400) {
         if (typeof responseData === 'object') {
           const errors = Object.entries(responseData)
@@ -675,6 +697,278 @@ function ProgramForm({ universityId, program, onClose, onSuccess }) {
   );
 }
 
+// ── University Edit Form - NO IMAGE UPLOAD ──────────────────────────────────
+function UniversityEditForm({ university, onClose, onSuccess }) {
+  const [formData, setFormData] = useState({
+    name: university?.name || '',
+    country: university?.country || '',
+    city: university?.city || '',
+    website: university?.website || '',
+    minimum_gpa: university?.minimum_gpa || '',
+    primary_language: university?.primary_language || 'English',
+    language_test_required: university?.language_test_required || false,
+    minimum_language_score: university?.minimum_language_score || '',
+    max_international_students: university?.max_international_students || '',
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value,
+    }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const payload = {
+        name: formData.name.trim(),
+        country: formData.country.trim(),
+        city: formData.city.trim() || '',
+        website: formData.website.trim() || '',
+        minimum_gpa: parseFloat(formData.minimum_gpa),
+        primary_language: formData.primary_language,
+        language_test_required: formData.language_test_required,
+        minimum_language_score: formData.language_test_required && formData.minimum_language_score 
+          ? parseFloat(formData.minimum_language_score) 
+          : null,
+        max_international_students: formData.max_international_students 
+          ? parseInt(formData.max_international_students) 
+          : null,
+      };
+
+      console.log('Sending university update:', payload);
+
+      await updateUniversity(university.id, payload);
+      onSuccess();
+      onClose();
+    } catch (err) {
+      console.error('University update error:', err);
+      
+      const responseData = err?.response?.data;
+      const status = err?.response?.status;
+      
+      if (status === 401) {
+        try {
+          await manualRefreshToken();
+          const payload = {
+            name: formData.name.trim(),
+            country: formData.country.trim(),
+            city: formData.city.trim() || '',
+            website: formData.website.trim() || '',
+            minimum_gpa: parseFloat(formData.minimum_gpa),
+            primary_language: formData.primary_language,
+            language_test_required: formData.language_test_required,
+            minimum_language_score: formData.language_test_required && formData.minimum_language_score 
+              ? parseFloat(formData.minimum_language_score) 
+              : null,
+            max_international_students: formData.max_international_students 
+              ? parseInt(formData.max_international_students) 
+              : null,
+          };
+          await updateUniversity(university.id, payload);
+          onSuccess();
+          onClose();
+          return;
+        } catch (refreshErr) {
+          setError('Your session expired. Please log out and log back in.');
+        }
+      } else if (typeof responseData === 'object') {
+        const firstKey = Object.keys(responseData)[0];
+        setError(responseData[firstKey]?.[0] || 'Could not update university.');
+      } else {
+        setError('Could not update university. Please check the form.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const isGpaValid = formData.minimum_gpa !== '' && parseFloat(formData.minimum_gpa) >= 0 && parseFloat(formData.minimum_gpa) <= 4.0;
+
+  return (
+    <div className="border border-slate-300 bg-white p-4 shadow-sm rounded-none mt-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700">
+          Edit University: {university?.name}
+        </h3>
+        <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+
+      {error && (
+        <div className="mb-3 flex items-center gap-2 border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 rounded-none">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> {error}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
+            University Name <span className="text-red-600">*</span>
+          </label>
+          <input
+            type="text"
+            name="name"
+            value={formData.name}
+            onChange={handleChange}
+            required
+            className="w-full border border-slate-300 px-3 py-2 text-sm rounded-none focus:border-gold-500 focus:outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
+            Country <span className="text-red-600">*</span>
+          </label>
+          <input
+            type="text"
+            name="country"
+            value={formData.country}
+            onChange={handleChange}
+            required
+            className="w-full border border-slate-300 px-3 py-2 text-sm rounded-none focus:border-gold-500 focus:outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
+            City
+          </label>
+          <input
+            type="text"
+            name="city"
+            value={formData.city}
+            onChange={handleChange}
+            className="w-full border border-slate-300 px-3 py-2 text-sm rounded-none focus:border-gold-500 focus:outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
+            Website
+          </label>
+          <input
+            type="url"
+            name="website"
+            value={formData.website}
+            onChange={handleChange}
+            placeholder="https://example.com"
+            className="w-full border border-slate-300 px-3 py-2 text-sm rounded-none focus:border-gold-500 focus:outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
+            Minimum GPA <span className="text-red-600">*</span>
+          </label>
+          <input
+            type="number"
+            name="minimum_gpa"
+            value={formData.minimum_gpa}
+            onChange={handleChange}
+            required
+            step="0.01"
+            min="0"
+            max="4"
+            className={`w-full border px-3 py-2 text-sm rounded-none focus:border-gold-500 focus:outline-none ${
+              formData.minimum_gpa && !isGpaValid ? 'border-red-400' : 'border-slate-300'
+            }`}
+          />
+          {formData.minimum_gpa && !isGpaValid && (
+            <p className="mt-1 text-[11px] text-red-600">Must be between 0.00 and 4.00</p>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
+            Primary Language
+          </label>
+          <select
+            name="primary_language"
+            value={formData.primary_language}
+            onChange={handleChange}
+            className="w-full border border-slate-300 bg-white px-3 py-2 text-sm rounded-none focus:border-gold-500 focus:outline-none"
+          >
+            {LANGUAGE_CHOICES.map((lang) => (
+              <option key={lang} value={lang}>{lang}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
+            Max International Students
+          </label>
+          <input
+            type="number"
+            name="max_international_students"
+            value={formData.max_international_students}
+            onChange={handleChange}
+            min="0"
+            placeholder="e.g. 50"
+            className="w-full border border-slate-300 px-3 py-2 text-sm rounded-none focus:border-gold-500 focus:outline-none"
+          />
+        </div>
+
+        <div className="flex items-center">
+          <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+            <input
+              type="checkbox"
+              name="language_test_required"
+              checked={formData.language_test_required}
+              onChange={handleChange}
+            />
+            Language Test Required
+          </label>
+        </div>
+
+        {formData.language_test_required && (
+          <div>
+            <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
+              Minimum Language Score
+            </label>
+            <input
+              type="number"
+              name="minimum_language_score"
+              value={formData.minimum_language_score}
+              onChange={handleChange}
+              step="0.01"
+              min="0"
+              className="w-full border border-slate-300 px-3 py-2 text-sm rounded-none focus:border-gold-500 focus:outline-none"
+            />
+          </div>
+        )}
+
+        <div className="sm:col-span-2 flex justify-end gap-2 mt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="border border-slate-300 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 rounded-none hover:border-slate-400"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={isSubmitting || (formData.minimum_gpa && !isGpaValid)}
+            className="flex items-center gap-1.5 border border-slate-800 bg-slate-800 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white rounded-none hover:bg-slate-900 disabled:opacity-50"
+          >
+            {isSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Pencil className="h-3.5 w-3.5" />}
+            Update University
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 // ── Program List for a University ──────────────────────────────────────────
 function ProgramList({ universityId, onRefresh }) {
   const [programs, setPrograms] = useState([]);
@@ -833,8 +1127,6 @@ function RegisterUniversityPanel({ isOpen, onClose, onRegistered }) {
     language_test_required: false,
     minimum_language_score: '',
   });
-  const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [registeredUniversityId, setRegisteredUniversityId] = useState(null);
@@ -852,22 +1144,20 @@ function RegisterUniversityPanel({ isOpen, onClose, onRegistered }) {
     setIsSubmitting(true);
     setError(null);
     try {
-      const formData = new FormData();
-      formData.append('name', formValues.name.trim());
-      formData.append('country', formValues.country.trim());
-      formData.append('city', formValues.city.trim() || '');
-      formData.append('website', formValues.website.trim() || '');
-      formData.append('minimum_gpa', gpaValue);
-      formData.append('primary_language', formValues.primary_language);
-      formData.append('language_test_required', formValues.language_test_required);
-      if (formValues.language_test_required && formValues.minimum_language_score) {
-        formData.append('minimum_language_score', Number(formValues.minimum_language_score));
-      }
-      if (imageFile) {
-        formData.append('image', imageFile);
-      }
+      const payload = {
+        name: formValues.name.trim(),
+        country: formValues.country.trim(),
+        city: formValues.city.trim() || '',
+        website: formValues.website.trim() || '',
+        minimum_gpa: gpaValue,
+        primary_language: formValues.primary_language,
+        language_test_required: formValues.language_test_required,
+        minimum_language_score: formValues.language_test_required && formValues.minimum_language_score
+          ? Number(formValues.minimum_language_score)
+          : null,
+      };
       
-      const response = await registerUniversity(formData);
+      const response = await registerUniversity(payload);
       const universityId = response.data.id;
       setRegisteredUniversityId(universityId);
       setFormValues({
@@ -880,8 +1170,6 @@ function RegisterUniversityPanel({ isOpen, onClose, onRegistered }) {
         language_test_required: false,
         minimum_language_score: '',
       });
-      setImageFile(null);
-      setImagePreview(null);
       if (onRegistered) onRegistered();
     } catch (err) {
       const responseData = err?.response?.data;
@@ -953,30 +1241,6 @@ function RegisterUniversityPanel({ isOpen, onClose, onRegistered }) {
         </select>
       </div>
 
-      {/* ── Image Upload ────────────────────────────────────────────────────── */}
-      <div className="mt-3">
-        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600 mb-1">
-          University Logo / Image
-        </label>
-        <input
-          type="file"
-          accept="image/*"
-          onChange={(e) => {
-            const file = e.target.files[0];
-            if (file) {
-              setImageFile(file);
-              setImagePreview(URL.createObjectURL(file));
-            }
-          }}
-          className="w-full border border-slate-300 bg-white px-3 py-2 text-sm rounded-none focus:outline-none focus:ring-1 focus:ring-slate-400"
-        />
-        {imagePreview && (
-          <div className="mt-2">
-            <img src={imagePreview} alt="Preview" className="h-20 w-20 object-cover border border-slate-200" />
-          </div>
-        )}
-      </div>
-
       <label className="mt-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
         <input
           type="checkbox"
@@ -1002,8 +1266,6 @@ function RegisterUniversityPanel({ isOpen, onClose, onRegistered }) {
           type="button"
           onClick={() => {
             setRegisteredUniversityId(null);
-            setImageFile(null);
-            setImagePreview(null);
             onClose();
           }}
           className="border border-slate-300 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 rounded-none hover:border-slate-400"
@@ -1032,8 +1294,6 @@ function RegisterUniversityPanel({ isOpen, onClose, onRegistered }) {
             type="button"
             onClick={() => {
               setRegisteredUniversityId(null);
-              setImageFile(null);
-              setImagePreview(null);
               onClose();
             }}
             className="mt-3 border border-slate-300 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 rounded-none hover:border-slate-400"
@@ -1052,6 +1312,8 @@ function UniversityManager() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedUniversityId, setSelectedUniversityId] = useState(null);
   const [isRegisterPanelOpen, setIsRegisterPanelOpen] = useState(false);
+  const [editingUniversity, setEditingUniversity] = useState(null);
+  const [showUniversityEdit, setShowUniversityEdit] = useState(false);
 
   const fetchUniversities = useCallback(async () => {
     setIsLoading(true);
@@ -1116,9 +1378,38 @@ function UniversityManager() {
                       <div className="flex items-center gap-3">
                         <span className="text-xs text-slate-400">GPA: {uni.minimum_gpa}</span>
                         <span className="text-xs text-slate-400">{uni.primary_language}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingUniversity(uni);
+                            setShowUniversityEdit(true);
+                          }}
+                          className="flex items-center gap-1 border border-slate-300 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 rounded-none hover:border-slate-400"
+                        >
+                          <Pencil className="h-3 w-3" />
+                          Edit University
+                        </button>
                         <ChevronDown className={`h-5 w-5 text-slate-400 transition-transform ${isSelected ? 'rotate-180' : ''}`} />
                       </div>
                     </div>
+
+                    {showUniversityEdit && editingUniversity?.id === uni.id && (
+                      <div className="bg-slate-50 px-6 py-4">
+                        <UniversityEditForm
+                          university={editingUniversity}
+                          onClose={() => {
+                            setShowUniversityEdit(false);
+                            setEditingUniversity(null);
+                          }}
+                          onSuccess={() => {
+                            fetchUniversities();
+                            setShowUniversityEdit(false);
+                            setEditingUniversity(null);
+                          }}
+                        />
+                      </div>
+                    )}
 
                     {isSelected && (
                       <div className="bg-slate-50 px-6 py-4">
@@ -1146,7 +1437,6 @@ function AdminReviewDesk() {
   return (
     <div className="bg-slate-100 p-6 pb-6">
       <div className="mx-auto max-w-7xl">
-        {/* Toggle between Review Desk and Program Management */}
         <div className="mb-6 flex gap-2">
           <button
             type="button"
@@ -1208,5 +1498,4 @@ function AdminReviewDesk() {
   );
 }
 
-// ── EXPORT ────────────────────────────────────────────────────────────────────
 export default AdminReviewDesk;

@@ -1,60 +1,57 @@
 // =============================================================================
-// src/api/admin.js  (CORRECTED)
+// src/api/admin.js
 // -----------------------------------------------------------------------------
 // Admin API calls - connected to real backend endpoints.
 // =============================================================================
 
-import apiClient from './client';  // <-- MUST HAVE THIS IMPORT!
+import { getApplications, getApplication, reviewDocument, advanceApplication, createUniversity, apiClient } from './client';
 import { normalizeList } from './utils';
 
-// CONFIRMED against ApplicationSerializer._validate_status_transition
+// ── Status transitions ──────────────────────────────────────────────────────
 export const FORWARD_TRANSITIONS = {
   SUBMITTED: 'UNDER_REVIEW',
-  UNDER_REVIEW: 'COMPLIANCE_PHASE',
-  COMPLIANCE_PHASE: 'APPROVED',
+  UNDER_REVIEW: 'HOST_REVIEW',
+  HOST_REVIEW: 'APPROVED',
 };
 
-// ── Applications ──────────────────────────────────────────────────────────────
+// ── Application Queue ──────────────────────────────────────────────────────
 export async function getApplicationQueue(params) {
-  const response = await apiClient.get('/applications/', { params });
+  const response = await getApplications(params);
   const { results, count } = normalizeList(response.data);
   return { data: { results, count } };
 }
 
+// ── Application Detail ─────────────────────────────────────────────────────
 export async function getApplicationDetail(applicationId) {
-  const response = await apiClient.get(`/applications/${applicationId}/`);
+  const response = await getApplication(applicationId);
   return { data: { ...response.data, documents: response.data.document_checklist ?? [] } };
 }
 
+// ── Document Reviews ───────────────────────────────────────────────────────
 export function verifyDocument(documentId) {
-  return apiClient.patch(`/documents/${documentId}/review/`, { verification_status: 'APPROVED' });
+  return reviewDocument(documentId, { verification_status: 'APPROVED' });
 }
 
 export function flagDocument(documentId, comment) {
-  return apiClient.patch(`/documents/${documentId}/review/`, { 
-    verification_status: 'ACTION_REQUIRED', 
-    admin_comment: comment 
-  });
+  return reviewDocument(documentId, { verification_status: 'ACTION_REQUIRED', admin_comment: comment });
 }
 
+// ── Application Approve/Reject ─────────────────────────────────────────────
 export function approveApplication(applicationId, currentStatus) {
   const nextStatus = FORWARD_TRANSITIONS[currentStatus];
-  return apiClient.post(`/applications/${applicationId}/advance/`, { status: nextStatus });
+  return advanceApplication(applicationId, nextStatus ? { status: nextStatus } : {});
 }
 
 export function rejectApplication(applicationId, comment) {
-  return apiClient.post(`/applications/${applicationId}/reject/`, { 
-    status: 'REJECTED', 
-    rejection_reason: comment 
-  });
+  return advanceApplication(applicationId, { status: 'REJECTED', rejection_reason: comment });
 }
 
-// ── Universities ──────────────────────────────────────────────────────────────
+// ── University Registration ────────────────────────────────────────────────
 export function registerUniversity(payload) {
-  return apiClient.post('/universities/', payload);
+  return createUniversity(payload);
 }
 
-// ── Super Admin API Calls ──────────────────────────────────────────────────
+// ── SUPER ADMIN FUNCTIONS ──────────────────────────────────────────────────
 export function getUnverifiedAdmins() {
   return apiClient.get('/users/unverified-admins/');
 }

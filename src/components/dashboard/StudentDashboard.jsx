@@ -3,6 +3,7 @@
 // -----------------------------------------------------------------------------
 // PHASE 3 — GlobalScholar Student Workspace
 // Supports multiple applications to multiple universities and programs.
+// COMPLIANCE VAULT IS ALWAYS VISIBLE - Students upload documents immediately
 // =============================================================================
 
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
@@ -46,9 +47,8 @@ import {
   getUniversityProgramsList,
   clearApplicationCache,
 } from '../../api/students';
-import { bulkUploadDocuments, getNotifications, markNotificationRead } from '../../api/client';
+import { bulkUploadDocuments } from '../../api/client';
 import { documentTypeLabel, advisoryBadgeMeta, LANGUAGE_CHOICES, Badge } from './shared/DashboardUI';
-import NotificationPopup from '../NotificationPopup';
 
 // ── STATIC CONFIG ──────────────────────────────────────────────────────────────
 // UPDATED: Removed COMPLIANCE_PHASE, added HOST_REVIEW
@@ -79,7 +79,7 @@ function toneForStatus(status) {
 function StatusBanner({ status, hasPendingDocuments, applicationCount }) {
   const statusMap = {
     DRAFT: { label: 'Draft', color: 'bg-slate-100 border-slate-300 text-slate-700', text: 'Your application is in draft mode. Complete and submit when ready.' },
-    SUBMITTED: { label: 'Submitted', color: 'bg-navy-50 border-navy-200 text-navy-700', text: 'Your application has been submitted and is awaiting review by the Home Admin.' },
+    SUBMITTED: { label: 'Submitted', color: 'bg-navy-50 border-navy-200 text-navy-700', text: 'Your application has been submitted. Please upload your documents below.' },
     UNDER_REVIEW: { label: 'Under Review', color: 'bg-amber-50 border-amber-200 text-amber-700', text: 'Your application is being reviewed by the Home Admin.' },
     HOST_REVIEW: { label: 'Host Review', color: 'bg-gold-50 border-gold-300 text-navy-900', text: 'Your application has been forwarded to the Host Coordinator for final review.' },
     APPROVED: { label: 'Approved', color: 'bg-emerald-50 border-emerald-200 text-emerald-700', text: 'Congratulations! Your application has been approved.' },
@@ -345,6 +345,7 @@ function DocumentSummary({ checklist }) {
 }
 
 // ── COMPLIANCE CHECKLIST VAULT ─────────────────────────────────────────────
+// FIX: Vault is ALWAYS VISIBLE - no waiting for admin review
 function ComplianceVault({ onChecklistChange }) {
   const [checklist, setChecklist] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -364,20 +365,30 @@ function ComplianceVault({ onChecklistChange }) {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await getDocumentChecklist();
+      // ── FIX: Get ANY active application (not DRAFT or REJECTED) ──────────
+      const applications = await getStudentApplications();
+      const activeApp = applications.find((app) => 
+        app.status !== 'DRAFT' && 
+        app.status !== 'REJECTED'
+      );
+      
+      if (!activeApp) {
+        setChecklist([]);
+        if (onChecklistChange) onChecklistChange([]);
+        setIsLoading(false);
+        setIsFetching(false);
+        return;
+      }
+      
+      const response = await getDocumentChecklist(activeApp.id);
       const data = Array.isArray(response.data) ? response.data : [];
       setChecklist(data);
       if (onChecklistChange) onChecklistChange(data);
     } catch (err) {
       console.error('Failed to fetch checklist:', err);
-      if (err.response?.status === 429) {
-        setChecklist([]);
-        if (onChecklistChange) onChecklistChange([]);
-      } else {
-        setError('Could not load checklist. Please refresh.');
-        setChecklist([]);
-        if (onChecklistChange) onChecklistChange([]);
-      }
+      setError('Could not load checklist. Please refresh.');
+      setChecklist([]);
+      if (onChecklistChange) onChecklistChange([]);
     } finally {
       setIsLoading(false);
       setIsFetching(false);
@@ -499,9 +510,9 @@ function ComplianceVault({ onChecklistChange }) {
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center border border-slate-200 bg-slate-50">
             <FileText className="h-6 w-6 text-slate-300" />
           </div>
-          <p>No checklist items assigned yet.</p>
+          <p>No documents required yet.</p>
           <p className="mt-1 text-xs text-slate-400">
-            Your application will generate documents once it reaches the review stage.
+            Once you submit your application, documents will appear here for upload.
           </p>
         </div>
       </section>
@@ -513,7 +524,7 @@ function ComplianceVault({ onChecklistChange }) {
       <div className="flex flex-wrap items-center justify-between border-b border-slate-200 p-6">
         <div>
           <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">Compliance Checklist Vault</h2>
-          <p className="mt-1 text-xs text-slate-500">Required documentation for your active application</p>
+          <p className="mt-1 text-xs text-slate-500">Upload your documents for review</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -572,7 +583,9 @@ function ComplianceVault({ onChecklistChange }) {
                   <td className="px-6 py-3">
                     <ChecklistStatusBadge status={item.verification_status} />
                   </td>
-                  <td className="px-6 py-3 text-slate-500">{item.updated_at}</td>
+                  <td className="px-6 py-3 text-slate-500">
+                    {item.updated_at ? new Date(item.updated_at).toLocaleDateString() : '—'}
+                  </td>
                 </tr>
 
                 {expandedId === item.id && isActionable && (
@@ -980,26 +993,6 @@ export default function StudentDashboard() {
   const [isTogglingHighSchool, setIsTogglingHighSchool] = useState(false);
   const [checklist, setChecklist] = useState([]);
   const [hasActionRequiredItems, setHasActionRequiredItems] = useState(false);
-  const [notification, setNotification] = useState(null);
-  const [showNotification, setShowNotification] = useState(false);
-
-  // ── Check for notifications on load ──────────────────────────────────────
-  const checkNotifications = useCallback(async () => {
-    try {
-      const response = await getNotifications();
-      const unread = response.data.results?.filter(n => !n.is_read) || [];
-      if (unread.length > 0) {
-        // Get the most recent unread notification
-        const latest = unread[0];
-        setNotification(latest);
-        setShowNotification(true);
-        // Mark as read after showing
-        await markNotificationRead(latest.id);
-      }
-    } catch (error) {
-      // Silently fail - notifications are non-critical
-    }
-  }, []);
 
   const loadInitialData = useCallback(async () => {
     setIsProfileLoading(true);
@@ -1023,10 +1016,7 @@ export default function StudentDashboard() {
     }
 
     setIsProfileLoading(false);
-
-    // Check for notifications after loading initial data
-    await checkNotifications();
-  }, [checkNotifications]);
+  }, []);
 
   useEffect(() => {
     loadInitialData();
@@ -1110,14 +1100,6 @@ export default function StudentDashboard() {
           </div>
         )}
       </div>
-
-      {/* ── Notification Popup ────────────────────────────────────────────── */}
-      {showNotification && notification && (
-        <NotificationPopup 
-          notification={notification} 
-          onClose={() => setShowNotification(false)} 
-        />
-      )}
     </div>
   );
 }

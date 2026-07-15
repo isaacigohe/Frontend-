@@ -3,8 +3,6 @@
 // -----------------------------------------------------------------------------
 // PUBLIC landing / explore page, mounted at the root route "/". No auth
 // required — this is the first thing a prospective student sees.
-//
-// NEW: Card-based grid layout with university images and "View More" buttons.
 // =============================================================================
 
 import { useState, useEffect, useCallback } from 'react';
@@ -25,19 +23,18 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  AlertTriangle,
 } from 'lucide-react';
 import { CustomDropdown, Badge, PaginationFooter, LoadingRow, EmptyState, advisoryBadgeMeta, LANGUAGE_CHOICES, degreeLevelLabel } from './shared/DashboardUI';
 import { getPublicUniversities } from '../../api/public';
 
-const PAGE_SIZE = 6; // 6 universities per page
+const PAGE_SIZE = 6;
 const COUNTRY_OPTIONS = ['All Countries', 'United States', 'United Kingdom', 'Germany', 'Japan', 'South Korea', 'Australia', 'France', 'Spain'];
 const LANGUAGE_OPTIONS = ['All Languages', ...LANGUAGE_CHOICES];
 
 // ── University Card ──────────────────────────────────────────────────────────
 function UniversityCard({ university }) {
   const navigate = useNavigate();
-  const imageUrl = university.image_url || null;
-  const hasImage = Boolean(imageUrl);
   const { tone, label } = advisoryBadgeMeta(university.travel_advisory_level);
   const toneClasses = {
     slate: 'border-slate-300 text-slate-500',
@@ -53,22 +50,13 @@ function UniversityCard({ university }) {
 
   return (
     <div className="group flex flex-col overflow-hidden border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-1">
-      {/* ── Image ────────────────────────────────────────────────────────────── */}
-      <div className="relative h-48 w-full overflow-hidden bg-navy-900">
-        {hasImage ? (
-          <img
-            src={imageUrl}
-            alt={university.name}
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-            loading="lazy"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-navy-700 to-navy-900">
-            <span className="text-4xl font-bold text-white/20">
-              {university.name.charAt(0).toUpperCase()}
-            </span>
-          </div>
-        )}
+      {/* ── Header with University Initial ────────────────────────────────── */}
+      <div className="relative h-32 w-full overflow-hidden bg-navy-800">
+        <div className="flex h-full w-full items-center justify-center">
+          <span className="text-5xl font-bold text-white/30">
+            {university.name.charAt(0).toUpperCase()}
+          </span>
+        </div>
         {/* Advisory Level Badge (top right corner) */}
         <div className="absolute right-3 top-3">
           <span className={`inline-flex items-center gap-1 border bg-white/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${toneClasses}`}>
@@ -83,7 +71,8 @@ function UniversityCard({ university }) {
         <h3 className="text-base font-bold uppercase tracking-wide text-navy-900 line-clamp-1">
           {university.name}
         </h3>
-        <p className="mt-0.5 text-xs text-slate-500">
+        <p className="mt-0.5 text-xs text-slate-500 flex items-center gap-1">
+          <MapPin className="h-3 w-3" />
           {university.city ? `${university.city}, ` : ''}{university.country}
         </p>
         <p className="text-xs text-slate-500">
@@ -107,6 +96,7 @@ function UniversityCard({ university }) {
     </div>
   );
 }
+
 // ── HeroSection ──────────────────────────────────────────────────────────────
 function HeroSection() {
   return (
@@ -177,10 +167,12 @@ export default function ExploreCatalog() {
       if (language !== 'All Languages') params.language = language;
       if (searchQuery) params.search = searchQuery;
       const response = await getPublicUniversities(params);
-      setUniversities(response.data.results);
-      setTotalCount(response.data.count);
+      setUniversities(response.data.results || []);
+      setTotalCount(response.data.count || 0);
     } catch (err) {
+      console.error('Failed to fetch universities:', err);
       setError('Could not load the university catalog right now. Please refresh.');
+      setUniversities([]);
     } finally {
       setIsLoading(false);
     }
@@ -245,14 +237,12 @@ export default function ExploreCatalog() {
           <EmptyState label="No universities match the current filters." />
         ) : (
           <>
-            {/* Grid: 3 columns on large screens, 2 on medium, 1 on small */}
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {universities.map((university) => (
                 <UniversityCard key={university.id} university={university} />
               ))}
             </div>
 
-            {/* Pagination */}
             <div className="mt-6 flex items-center justify-between border-t border-slate-200 pt-4">
               <span className="text-xs text-slate-500">
                 Showing {(page - 1) * PAGE_SIZE + 1} to {Math.min(page * PAGE_SIZE, totalCount)} of {totalCount} universities

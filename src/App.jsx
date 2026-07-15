@@ -6,7 +6,7 @@ import DashboardLayout from './components/layout/DashboardLayout';
 
 // Dashboard components
 import StudentDashboard from './components/dashboard/StudentDashboard';
-import AdminReviewDesk from './components/dashboard/AdminReviewDesk';
+import AdminReviewDesk from './components/dashboard/AdminReviewDesk';  // <-- FIXED: Correct case
 import HostCoordinatorDashboard from './components/dashboard/HostCoordinatorDashboard';
 import SuperAdminDashboard from './components/dashboard/SuperAdminDashboard';
 import ExploreCatalog from './components/dashboard/ExploreCatalog';
@@ -14,9 +14,12 @@ import UniversityDetail from './components/dashboard/UniversityDetail';
 
 // Auth Pages
 import LoginPage from './pages/auth/LoginPage';
-import SuperAdminLoginPage from './pages/auth/SuperAdminLoginPage'; // <-- NEW
+import SuperAdminLoginPage from './pages/auth/SuperAdminLoginPage';
 import RegisterPage from './pages/auth/RegisterPage';
 import UnauthorizedPage from './pages/UnauthorizedPage';
+
+// Notifications Page
+import NotificationsPage from './pages/NotificationsPage';
 
 export default function App() {
   return (
@@ -26,7 +29,7 @@ export default function App() {
           {/* Public Routes */}
           <Route path="/" element={<ExploreCatalog />} />
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/super-admin-login" element={<SuperAdminLoginPage />} /> {/* <-- NEW */}
+          <Route path="/super-admin-login" element={<SuperAdminLoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/unauthorized" element={<UnauthorizedPage />} />
           <Route path="/universities/:id" element={<UniversityDetail />} />
@@ -63,6 +66,15 @@ export default function App() {
             <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
               <DashboardLayout>
                 <SuperAdminDashboard />
+              </DashboardLayout>
+            </ProtectedRoute>
+          } />
+
+          {/* ── Notifications Route ──────────────────────────────────────── */}
+          <Route path="/notifications" element={
+            <ProtectedRoute>
+              <DashboardLayout>
+                <NotificationsPage />
               </DashboardLayout>
             </ProtectedRoute>
           } />

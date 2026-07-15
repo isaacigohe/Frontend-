@@ -1,12 +1,13 @@
 // =============================================================================
 // src/components/layout/Header.jsx
 // -----------------------------------------------------------------------------
-// Shared header for every authenticated dashboard (Student, Admin, Host
-// Coordinator). Includes notification bell with dropdown and unread count.
+// Clean header - no role name, no borders on buttons, no "Profile" text
+// Better notifications display
+// Logo always goes to landing page (/)
 // =============================================================================
 
 import { Link, useNavigate } from 'react-router-dom';
-import { GraduationCap, LogOut, Bell, CheckCheck, Shield, User } from 'lucide-react';
+import { GraduationCap, LogOut, Bell, CheckCheck, Shield, User, BellDot, FileText, CheckCircle2, XCircle, AlertTriangle, Clock } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { getNotifications, getUnreadCount, markNotificationRead, markAllNotificationsRead } from '../../api/client';
@@ -16,13 +17,20 @@ export default function Header() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [showProfile, setShowProfile] = useState(false);
-
-  // ── Notification State ──────────────────────────────────────────────────────
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const dropdownRef = useRef(null);
+
+  // ── Get notification icon based on type ──────────────────────────────────
+  const getNotificationIcon = (type) => {
+    if (!type) return <Bell className="h-4 w-4 text-navy-400" />;
+    if (type.includes('APPROVED')) return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
+    if (type.includes('REJECTED')) return <XCircle className="h-4 w-4 text-red-500" />;
+    if (type.includes('ACTION_REQUIRED')) return <AlertTriangle className="h-4 w-4 text-amber-500" />;
+    if (type.includes('DOCUMENT')) return <FileText className="h-4 w-4 text-blue-500" />;
+    return <Bell className="h-4 w-4 text-navy-400" />;
+  };
 
   // ── Fetch Notifications ─────────────────────────────────────────────────────
   const fetchNotifications = async () => {
@@ -34,7 +42,7 @@ export default function Header() {
       setNotifications(notifResponse.data.results || notifResponse.data || []);
       setUnreadCount(countResponse.data.unread_count || 0);
     } catch (error) {
-      // Silently fail - notifications are non-critical
+      // Silently fail
     }
   };
 
@@ -62,11 +70,7 @@ export default function Header() {
   const handleMarkAsRead = async (notificationId) => {
     try {
       await markNotificationRead(notificationId);
-      setNotifications((prev) =>
-        prev.map((n) =>
-          n.id === notificationId ? { ...n, is_read: true } : n
-        )
-      );
+      setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
       setUnreadCount((prev) => Math.max(0, prev - 1));
     } catch (error) {
       // Silently fail
@@ -77,9 +81,7 @@ export default function Header() {
   const handleMarkAllAsRead = async () => {
     try {
       await markAllNotificationsRead();
-      setNotifications((prev) =>
-        prev.map((n) => ({ ...n, is_read: true }))
-      );
+      setNotifications([]);
       setUnreadCount(0);
     } catch (error) {
       // Silently fail
@@ -103,48 +105,58 @@ export default function Header() {
     return date.toLocaleDateString();
   };
 
+  // ── Get dashboard route based on role (for back button) ───────────────────
+  const getDashboardRoute = () => {
+    if (!user) return '/';
+    if (user.role === 'STUDENT') return '/student';
+    if (user.role === 'HOME_ADMIN') return '/admin';
+    if (user.role === 'HOST_COORD') return '/coordinator';
+    if (user.role === 'SUPER_ADMIN') return '/super-admin';
+    return '/';
+  };
+
   return (
-    <header className="sticky top-0 z-30 border-b border-navy-800 bg-navy-900">
+    <header className="sticky top-0 z-30 bg-navy-900">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3">
-        {/* ── Brand ───────────────────────────────────────────────────────────── */}
+        {/* ── Brand - ALWAYS goes to landing page ───────────────────────────── */}
         <Link to="/" className="flex items-center gap-2 text-white hover:text-gold-500 transition-colors">
           <GraduationCap className="h-6 w-6 text-gold-500" strokeWidth={2} />
           <span className="text-sm font-bold uppercase tracking-[0.15em]">GlobalScholar</span>
         </Link>
 
-        {/* ── Right Section ───────────────────────────────────────────────────── */}
+        {/* ── Right Section - Clean, no borders ────────────────────────────── */}
         <div className="flex items-center gap-3">
           {user ? (
             // ── LOGGED IN ──────────────────────────────────────────────────────
             <>
-              {/* User Role Badge with University for Host Coordinators */}
-              <span className="hidden text-xs uppercase tracking-wide text-navy-200 sm:inline">
+              {/* User name - no role */}
+              <span className="hidden text-xs text-navy-200 sm:inline">
                 {user.full_name || user.email}
-                {user.role === 'HOST_COORD' && user.host_university_name && (
-                  <> · <span className="text-gold-500">{user.host_university_name}</span></>
-                )}
-                <> · {user.role?.replace(/_/g, ' ')}</>
               </span>
 
-              {/* Profile Button */}
+              {/* Profile Icon - no text, no border */}
               <button
                 type="button"
                 onClick={() => setShowProfile(true)}
-                className="flex items-center gap-1.5 border border-white/25 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white transition-colors hover:border-white hover:bg-white/10"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-navy-200 hover:text-white hover:bg-navy-800 transition-colors"
+                title="Profile"
               >
-                <User className="h-3.5 w-3.5" />
-                Profile
+                <User className="h-4 w-4" />
               </button>
 
-              {/* Notification Bell */}
+              {/* ── Notification Bell ────────────────────────────────────────── */}
               <div ref={dropdownRef} className="relative">
                 <button
                   type="button"
                   onClick={() => setIsDropdownOpen((prev) => !prev)}
-                  className="relative flex items-center justify-center rounded-full p-1.5 text-navy-200 hover:text-white hover:bg-navy-800 transition-colors"
+                  className="relative flex h-8 w-8 items-center justify-center rounded-full text-navy-200 hover:text-white hover:bg-navy-800 transition-colors"
                   aria-label="Notifications"
                 >
-                  <Bell className="h-5 w-5" />
+                  {unreadCount > 0 ? (
+                    <BellDot className="h-4 w-4" />
+                  ) : (
+                    <Bell className="h-4 w-4" />
+                  )}
                   {unreadCount > 0 && (
                     <span className="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-gold-500 text-[10px] font-bold text-navy-900">
                       {unreadCount > 9 ? '9+' : unreadCount}
@@ -152,12 +164,13 @@ export default function Header() {
                   )}
                 </button>
 
-                {/* Notification Dropdown */}
+                {/* ── Notification Dropdown ──────────────────────────────────── */}
                 {isDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-80 max-h-[400px] overflow-hidden rounded border border-navy-700 bg-navy-800 shadow-deep">
-                    <div className="flex items-center justify-between border-b border-navy-700 px-4 py-2">
+                  <div className="absolute right-0 mt-2 w-80 max-h-[420px] overflow-hidden rounded border border-navy-700 bg-navy-800 shadow-deep">
+                    {/* Dropdown Header */}
+                    <div className="flex items-center justify-between border-b border-navy-700 px-4 py-2.5">
                       <span className="text-xs font-semibold uppercase tracking-wide text-white">Notifications</span>
-                      {notifications.some((n) => !n.is_read) && (
+                      {notifications.length > 0 && (
                         <button
                           type="button"
                           onClick={handleMarkAllAsRead}
@@ -168,10 +181,10 @@ export default function Header() {
                         </button>
                       )}
                     </div>
+
+                    {/* Notifications List */}
                     <div className="max-h-[340px] overflow-y-auto">
-                      {isLoading ? (
-                        <div className="flex items-center justify-center py-8 text-sm text-navy-400">Loading...</div>
-                      ) : notifications.length === 0 ? (
+                      {notifications.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-8 text-sm text-navy-400">
                           <Bell className="h-8 w-8 text-navy-600 mb-2" />
                           No notifications
@@ -180,22 +193,37 @@ export default function Header() {
                         notifications.map((notification) => (
                           <div
                             key={notification.id}
-                            className={`border-b border-navy-700/50 px-4 py-3 transition-colors ${
-                              notification.is_read
-                                ? 'hover:bg-navy-700/50'
-                                : 'bg-navy-700/30 hover:bg-navy-700/60'
+                            className={`border-b border-navy-700/50 px-4 py-3 hover:bg-navy-700/50 transition-colors ${
+                              !notification.is_read ? 'bg-navy-700/30' : ''
                             }`}
                           >
-                            <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-3">
+                              {/* Icon */}
+                              <div className="mt-0.5 shrink-0">
+                                {getNotificationIcon(notification.notification_type)}
+                              </div>
+                              
                               <div className="flex-1 min-w-0">
-                                <p className={`text-sm ${notification.is_read ? 'text-navy-300' : 'text-white'}`}>
-                                  {notification.title}
-                                </p>
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className={`text-sm font-medium ${!notification.is_read ? 'text-white' : 'text-navy-300'}`}>
+                                    {notification.title}
+                                  </p>
+                                  {!notification.is_read && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMarkAsRead(notification.id)}
+                                      className="shrink-0 text-[10px] text-gold-500 hover:text-gold-400"
+                                    >
+                                      Mark read
+                                    </button>
+                                  )}
+                                </div>
                                 <p className="mt-0.5 text-xs text-navy-400 line-clamp-2">
                                   {notification.message}
                                 </p>
                                 <div className="mt-1 flex items-center gap-2">
-                                  <span className="text-[10px] text-navy-500">
+                                  <span className="flex items-center gap-1 text-[10px] text-navy-500">
+                                    <Clock className="h-3 w-3" />
                                     {formatTime(notification.created_at)}
                                   </span>
                                   {notification.link && (
@@ -214,20 +242,13 @@ export default function Header() {
                                   )}
                                 </div>
                               </div>
-                              {!notification.is_read && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleMarkAsRead(notification.id)}
-                                  className="shrink-0 text-[10px] text-gold-500 hover:text-gold-400"
-                                >
-                                  Mark read
-                                </button>
-                              )}
                             </div>
                           </div>
                         ))
                       )}
                     </div>
+
+                    {/* Dropdown Footer */}
                     <div className="border-t border-navy-700 px-4 py-2 text-center">
                       <Link
                         to="/notifications"
@@ -241,40 +262,35 @@ export default function Header() {
                 )}
               </div>
 
-              {/* Logout Button */}
+              {/* ── Logout Icon - no text, no border ────────────────────────── */}
               <button
                 type="button"
                 onClick={handleLogout}
-                className="flex items-center gap-1.5 border border-white/25 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white transition-colors hover:border-white hover:bg-white/10"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-navy-200 hover:text-white hover:bg-navy-800 transition-colors"
+                title="Log Out"
               >
-                <LogOut className="h-3.5 w-3.5" />
-                Log Out
+                <LogOut className="h-4 w-4" />
               </button>
             </>
           ) : (
             // ── NOT LOGGED IN ──────────────────────────────────────────────────
             <>
-              {/* Super Admin Login Link */}
               <Link
                 to="/super-admin-login"
-                className="flex items-center gap-1.5 border border-gold-500/50 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-gold-500 transition-colors hover:bg-gold-500/10"
+                className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gold-500 hover:text-gold-400 transition-colors"
               >
                 <Shield className="h-3.5 w-3.5" />
                 Super Admin
               </Link>
-
-              {/* Regular Login */}
               <Link
                 to="/login"
-                className="border border-white/25 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white transition-colors hover:border-white hover:bg-white/10"
+                className="text-xs font-semibold uppercase tracking-wide text-white hover:text-gold-500 transition-colors"
               >
                 Sign In
               </Link>
-
-              {/* Register */}
               <Link
                 to="/register"
-                className="bg-gold-500 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-navy-900 transition-colors hover:bg-gold-600"
+                className="bg-gold-500 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-navy-900 transition-colors hover:bg-gold-600"
               >
                 Register
               </Link>
@@ -284,7 +300,7 @@ export default function Header() {
       </div>
 
       {/* Slim decorative strip */}
-      <div className="relative h-10 overflow-hidden bg-navy-950">
+      <div className="relative h-8 overflow-hidden bg-navy-950">
         <div className="absolute inset-0 bg-gradient-to-r from-navy-950 via-navy-900 to-navy-950 opacity-80" />
       </div>
 
